@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PageSpeed Tracker</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="page-header">
+      <div>
+        <h1>PageSpeed Tracker</h1>
+        <p>Track PageSpeed Insights over time, average results, and compare URLs.</p>
+      </div>
+      <div class="header-actions">
+        <button id="start-all" type="button">Start All</button>
+        <button id="stop-all" type="button" class="secondary">Stop All</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="panel controls-panel">
+        <h2>Setup</h2>
+        <form id="setup-form" autocomplete="off">
+          <label>
+            Google API Key
+            <input id="api-key" name="apiKey" type="password" placeholder="AIza..." required />
+          </label>
+          <label>
+            Poll Interval (seconds)
+            <input id="poll-interval" name="interval" type="number" min="60" step="1" value="60" required />
+          </label>
+          <label>
+            URL
+            <input id="url-input" name="url" type="url" placeholder="https://example.com" required />
+          </label>
+          <button type="submit">Add URL</button>
+        </form>
+        <p class="hint">
+          Runs both <strong>mobile</strong> and <strong>desktop</strong> tests each cycle.
+          Confidence is shown as a 95% interval: <code>mean ± points</code>.
+        </p>
+      </section>
+
+      <section class="panel">
+        <div class="section-title-row">
+          <h2>Tracked URLs</h2>
+          <button id="clear-all" type="button" class="secondary danger">Clear All Data</button>
+        </div>
+        <div id="url-cards" class="url-cards"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Comparison Table</h2>
+        <div class="table-wrap">
+          <table id="comparison-table">
+            <thead>
+              <tr>
+                <th>URL</th>
+                <th>Mode</th>
+                <th>Avg Score</th>
+                <th>95% Confidence</th>
+                <th>Samples</th>
+                <th>FCP</th>
+                <th>SI</th>
+                <th>LCP</th>
+                <th>TBT</th>
+                <th>CLS</th>
+              </tr>
+            </thead>
+            <tbody id="comparison-body">
+              <tr>
+                <td colspan="10" class="placeholder">No URLs yet. Add one above to begin tracking.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <template id="url-card-template">
+      <article class="url-card">
+        <header>
+          <div>
+            <h3 class="url-card-title"></h3>
+            <p class="url-card-meta"></p>
+          </div>
+          <div class="url-card-actions">
+            <button class="toggle-run" type="button"></button>
+            <button class="run-now secondary" type="button">Run Now</button>
+            <button class="remove danger" type="button">Remove</button>
+          </div>
+        </header>
+        <div class="mode-grid">
+          <section class="mode-panel" data-mode="mobile">
+            <h4>Mobile</h4>
+            <dl>
+              <div><dt>Average score</dt><dd class="score">--</dd></div>
+              <div><dt>95% confidence</dt><dd class="confidence">--</dd></div>
+              <div><dt>Samples</dt><dd class="samples">0</dd></div>
+              <div><dt>Last run</dt><dd class="last-run">--</dd></div>
+            </dl>
+          </section>
+          <section class="mode-panel" data-mode="desktop">
+            <h4>Desktop</h4>
+            <dl>
+              <div><dt>Average score</dt><dd class="score">--</dd></div>
+              <div><dt>95% confidence</dt><dd class="confidence">--</dd></div>
+              <div><dt>Samples</dt><dd class="samples">0</dd></div>
+              <div><dt>Last run</dt><dd class="last-run">--</dd></div>
+            </dl>
+          </section>
+        </div>
+        <p class="error-text"></p>
+      </article>
+    </template>
+
+    <script src="app.js"></script>
+  </body>
+</html>
