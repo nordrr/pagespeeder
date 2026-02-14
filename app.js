@@ -202,7 +202,7 @@ function syncConfigFromInputs() {
   }
 
   if (!Number.isFinite(interval) || interval < 60) {
-    window.alert("Poll interval must be 60 seconds or greater.");
+    window.alert("Minimum pull interval must be 60 seconds or greater.");
     return false;
   }
 
@@ -237,20 +237,29 @@ function createTracker(url) {
     lastError: "",
     phase: "paused",
     activeStrategy: null,
-    cooldownUntil: null,
   };
 }
 
 function startTracker(tracker, runImmediately = false) {
+  if (tracker.running) {
+    return;
+  }
+
   tracker.running = true;
   tracker.lastError = "";
-  tracker.phase = "queued";
-  tracker.activeStrategy = null;
-  tracker.cooldownUntil = null;
   if (tracker.timerId) {
     clearTimeout(tracker.timerId);
     tracker.timerId = null;
   }
+
+  if (tracker.inFlight) {
+    // A request is already in flight: resuming should only re-enable auto-cycling.
+    persistState();
+    return;
+  }
+
+  tracker.phase = "queued";
+  tracker.activeStrategy = null;
 
   if (runImmediately) {
     runCycle(tracker);
@@ -267,9 +276,6 @@ function startTracker(tracker, runImmediately = false) {
 function stopTracker(tracker) {
   tracker.running = false;
   tracker.lastError = "";
-  tracker.phase = "paused";
-  tracker.activeStrategy = null;
-  tracker.cooldownUntil = null;
 
   if (tracker.timerId) {
     clearTimeout(tracker.timerId);
@@ -277,6 +283,10 @@ function stopTracker(tracker) {
   }
 
   tracker.nextRunAt = null;
+  if (!tracker.inFlight) {
+    tracker.phase = "paused";
+    tracker.activeStrategy = null;
+  }
   persistState();
 }
 
@@ -432,7 +442,6 @@ function scheduleNext(tracker, delayMs) {
   tracker.nextRunAt = Date.now() + delayMs;
   tracker.phase = "waiting";
   tracker.activeStrategy = null;
-  tracker.cooldownUntil = null;
   tracker.timerId = setTimeout(() => {
     tracker.timerId = null;
     runCycle(tracker);
@@ -474,7 +483,6 @@ async function runCycle(tracker) {
   tracker.lastError = "";
   tracker.phase = "running";
   tracker.activeStrategy = null;
-  tracker.cooldownUntil = null;
   const cycleStartedAt = Date.now();
   render();
   persistState();
@@ -487,7 +495,6 @@ async function runCycle(tracker) {
 
     tracker.phase = "awaiting-google";
     tracker.activeStrategy = strategy;
-    tracker.cooldownUntil = null;
     render();
     persistState();
 
@@ -504,27 +511,18 @@ async function runCycle(tracker) {
     if (!tracker.running) {
       break;
     }
-
-    tracker.phase = "cooldown";
-    tracker.cooldownUntil = Date.now() + 1200;
-    tracker.activeStrategy = strategy;
-    render();
-    persistState();
-    await wait(1200);
   }
 
   tracker.inFlight = false;
   if (tracker.running) {
     tracker.phase = "waiting";
     tracker.activeStrategy = null;
-    tracker.cooldownUntil = null;
     const targetNextRunAt = cycleStartedAt + state.pollIntervalSec * 1000;
     const delayMs = Math.max(0, targetNextRunAt - Date.now());
     scheduleNext(tracker, delayMs);
   } else {
     tracker.phase = "paused";
     tracker.activeStrategy = null;
-    tracker.cooldownUntil = null;
     tracker.nextRunAt = null;
   }
 
@@ -638,12 +636,6 @@ function normalizeUrl(value) {
   } catch {
     return "";
   }
-}
-
-function wait(ms) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
 }
 
 function internalErf(x) {
@@ -848,16 +840,15 @@ function formatCountdown(timestamp) {
 }
 
 function describeTrackerStatus(tracker) {
-  if (!tracker.running) {
-    return "Paused";
-  }
-
   if (tracker.phase === "awaiting-google") {
+    if (!tracker.running) {
+      return `Paused (waiting for Google PageSpeed result: ${tracker.activeStrategy})`;
+    }
     return `Waiting for Google PageSpeed result (${tracker.activeStrategy})`;
   }
 
-  if (tracker.phase === "cooldown") {
-    return `Cooldown between requests: ${formatCountdown(tracker.cooldownUntil)}`;
+  if (!tracker.running) {
+    return "Paused";
   }
 
   if (tracker.phase === "running") {
@@ -1035,13 +1026,12 @@ function buildScoreRows(tracker, limit = 200) {
   }
 
   const shouldShowPending =
-    tracker.running &&
+    (tracker.running || tracker.inFlight) &&
     mobileSamples.length === desktopSamples.length &&
     (tracker.phase === "waiting" ||
       tracker.phase === "queued" ||
       tracker.phase === "running" ||
-      tracker.phase === "awaiting-google" ||
-      tracker.phase === "cooldown");
+      tracker.phase === "awaiting-google");
 
   if (shouldShowPending) {
     rows.unshift({
@@ -1058,7 +1048,7 @@ function buildScoreRows(tracker, limit = 200) {
 }
 
 function getPendingStatus(tracker, rowData, mode) {
-  if (!tracker.running || (!rowData.pending && !rowData.isPartial)) {
+  if ((!tracker.running && !tracker.inFlight) || (!rowData.pending && !rowData.isPartial)) {
     return null;
   }
 
@@ -1067,10 +1057,6 @@ function getPendingStatus(tracker, rowData, mode) {
       return { kind: "google", text: "Google" };
     }
     return { kind: "queued", text: "Queued" };
-  }
-
-  if (tracker.phase === "cooldown") {
-    return { kind: "timer", text: "Cooldown" };
   }
 
   if (tracker.phase === "running" || tracker.phase === "queued" || tracker.phase === "waiting") {
@@ -1732,7 +1718,6 @@ function serializeTracker(tracker) {
     lastError: tracker.lastError,
     phase: tracker.phase,
     activeStrategy: tracker.activeStrategy,
-    cooldownUntil: tracker.cooldownUntil,
   };
 }
 
@@ -1801,10 +1786,11 @@ function hydrateState() {
         tracker.lastError = typeof stored.lastError === "string" ? stored.lastError : "";
         tracker.running = stored.running === true;
         tracker.phase = typeof stored.phase === "string" ? stored.phase : (tracker.running ? "queued" : "paused");
+        if (tracker.phase === "cooldown") {
+          tracker.phase = tracker.running ? "waiting" : "paused";
+        }
         tracker.activeStrategy =
           typeof stored.activeStrategy === "string" ? stored.activeStrategy : null;
-        tracker.cooldownUntil =
-          Number.isFinite(stored.cooldownUntil) ? stored.cooldownUntil : null;
 
         state.trackers.set(url, tracker);
       }
