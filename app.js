@@ -294,6 +294,21 @@ function scheduleNext(tracker, delayMs) {
   persistState();
 }
 
+function getStrategiesForCycle(tracker) {
+  const mobileCount = tracker.history.mobile.length;
+  const desktopCount = tracker.history.desktop.length;
+
+  if (mobileCount > desktopCount) {
+    return ["desktop"];
+  }
+
+  if (desktopCount > mobileCount) {
+    return ["mobile"];
+  }
+
+  return [...STRATEGIES];
+}
+
 async function runCycle(tracker) {
   if (!tracker.running || tracker.inFlight) {
     return;
@@ -317,7 +332,12 @@ async function runCycle(tracker) {
   render();
   persistState();
 
-  for (const strategy of STRATEGIES) {
+  const cycleStrategies = getStrategiesForCycle(tracker);
+  for (const strategy of cycleStrategies) {
+    if (!tracker.running) {
+      break;
+    }
+
     tracker.phase = "awaiting-google";
     tracker.activeStrategy = strategy;
     tracker.cooldownUntil = null;
@@ -334,6 +354,10 @@ async function runCycle(tracker) {
       persistState();
     }
 
+    if (!tracker.running) {
+      break;
+    }
+
     tracker.phase = "cooldown";
     tracker.cooldownUntil = Date.now() + 1200;
     tracker.activeStrategy = strategy;
@@ -343,12 +367,16 @@ async function runCycle(tracker) {
   }
 
   tracker.inFlight = false;
-  tracker.phase = "waiting";
-  tracker.activeStrategy = null;
-  tracker.cooldownUntil = null;
-
   if (tracker.running) {
+    tracker.phase = "waiting";
+    tracker.activeStrategy = null;
+    tracker.cooldownUntil = null;
     scheduleNext(tracker, state.pollIntervalSec * 1000);
+  } else {
+    tracker.phase = "paused";
+    tracker.activeStrategy = null;
+    tracker.cooldownUntil = null;
+    tracker.nextRunAt = null;
   }
 
   render();
