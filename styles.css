@@ -221,8 +221,9 @@ button:disabled {
   word-break: break-all;
 }
 
-.url-card-title.no-label .url-title-url {
-  display: none;
+.url-card-title.no-label .url-label-line {
+  font-weight: 500;
+  color: var(--muted);
 }
 
 .url-label-input {
@@ -269,13 +270,18 @@ button:disabled {
 .summary-strip {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 0;
+  border: 1px solid #c4c8ce;
 }
 
 .summary-tile {
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border: 1px solid #c4c8ce;
+  border-radius: 0;
   padding: 8px;
+}
+
+.summary-tile + .summary-tile {
+  border-left: 0;
 }
 
 .tile-label {

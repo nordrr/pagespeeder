@@ -1176,7 +1176,7 @@ function renderCards(renderContext) {
     const errorText = card.querySelector(".error-text");
 
     const hasLabel = Boolean(tracker.label && tracker.label.trim());
-    labelLine.textContent = hasLabel ? tracker.label : tracker.url;
+    labelLine.textContent = hasLabel ? tracker.label : "Add a label";
     urlLine.textContent = tracker.url;
     title.classList.toggle("no-label", !hasLabel);
     title.dataset.hint = hasLabel ? "Edit label" : "Add a label";
