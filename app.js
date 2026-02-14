@@ -65,6 +65,7 @@ const state = {
     key: null,
     direction: null,
   },
+  runDetail: null,
 };
 
 const setupForm = document.getElementById("setup-form");
@@ -78,7 +79,23 @@ const comparisonBody = document.getElementById("comparison-body");
 const startAllButton = document.getElementById("start-all");
 const stopAllButton = document.getElementById("stop-all");
 const clearAllButton = document.getElementById("clear-all");
+const runDetailBackdrop = document.getElementById("run-detail-backdrop");
+const runDetailPanel = document.getElementById("run-detail-panel");
+const runDetailCloseButton = document.getElementById("run-detail-close");
+const runDetailContent = document.getElementById("run-detail-content");
 const SORTABLE_KEYS = new Set(["url", "mode", "avgScore", "confidence", "samples", "fcp", "si", "lcp", "tbt", "cls"]);
+
+runDetailCloseButton?.addEventListener("click", () => {
+  closeRunDetailPanel();
+});
+runDetailBackdrop?.addEventListener("click", () => {
+  closeRunDetailPanel();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && state.runDetail) {
+    closeRunDetailPanel();
+  }
+});
 
 for (const header of sortableHeaders) {
   header.tabIndex = 0;
@@ -153,6 +170,7 @@ clearAllButton.addEventListener("click", () => {
   }
 
   state.trackers.clear();
+  closeRunDetailPanel();
   persistState();
   render();
 });
@@ -253,6 +271,9 @@ function removeTracker(url) {
 
   stopTracker(tracker);
   state.trackers.delete(url);
+  if (state.runDetail?.url === url) {
+    closeRunDetailPanel();
+  }
   persistState();
   render();
 }
@@ -517,13 +538,18 @@ function formatContributionText(strategy, metricKey, value) {
   };
 }
 
-function createMetricValueBlock(metric, value, percentile, strategy, withBackground = true) {
+function createMetricValueBlock(metric, value, percentile, strategy, withBackground = true, explicitTextColor = null) {
   const block = document.createElement("span");
   block.className = "metric-cell";
   if (withBackground) {
-    block.style.backgroundColor = percentileColor(percentile);
+    const background = percentileColor(percentile);
+    block.style.backgroundColor = background;
+    block.style.color = textColorForBackground(background);
   } else {
     block.classList.add("metric-cell-no-bg");
+    if (explicitTextColor) {
+      block.style.color = explicitTextColor;
+    }
   }
 
   const contribution = formatContributionText(strategy, metric.key, value);
@@ -573,6 +599,27 @@ function percentileColor(percentile) {
     return mixColor(low, mid, p / 50);
   }
   return mixColor(mid, high, (p - 50) / 50);
+}
+
+function parseRgbColor(color) {
+  const match = color.match(/rgb\((\d+)\s+(\d+)\s+(\d+)\)/);
+  if (!match) {
+    return null;
+  }
+  return {
+    r: Number.parseInt(match[1], 10),
+    g: Number.parseInt(match[2], 10),
+    b: Number.parseInt(match[3], 10),
+  };
+}
+
+function textColorForBackground(color) {
+  const parsed = parseRgbColor(color);
+  if (!parsed) {
+    return "#111827";
+  }
+  const luminance = (0.2126 * parsed.r + 0.7152 * parsed.g + 0.0722 * parsed.b) / 255;
+  return luminance < 0.58 ? "#f8fafc" : "#111827";
 }
 
 function getPercentile(population, value, higherIsBetter = true) {
@@ -793,19 +840,32 @@ function buildScoreRows(tracker, limit = 200) {
   return rows;
 }
 
-function renderScoreCell(cell, sample, mode, renderContext) {
+function renderScoreCell(cell, sample, mode, renderContext, tracker, runNumber) {
   if (!sample) {
     cell.className = "score-cell-empty";
     cell.style.backgroundColor = "";
+    cell.style.color = "";
     cell.textContent = "--";
     return;
   }
 
   const score = sample.performanceScore;
   const percentile = getPercentile(renderContext.runScorePopulation, score, true);
+  const background = percentileColor(percentile);
   cell.className = mode === "mobile" ? "score-cell-mobile" : "score-cell-desktop";
-  cell.style.backgroundColor = percentileColor(percentile);
-  cell.textContent = score.toFixed(0);
+  cell.style.backgroundColor = background;
+  cell.style.color = textColorForBackground(background);
+  cell.innerHTML = "";
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "run-score-button";
+  button.textContent = score.toFixed(0);
+  button.addEventListener("click", () => {
+    openRunDetailPanel(tracker, mode, sample, runNumber);
+  });
+
+  cell.append(button);
 }
 
 function renderScoreHistory(tbody, tracker, renderContext) {
@@ -826,15 +886,15 @@ function renderScoreHistory(tbody, tracker, renderContext) {
     const row = document.createElement("tr");
     const runCell = document.createElement("td");
     runCell.className = "score-history-run";
-    runCell.textContent = `#${rowData.runNumber} ${formatTimestamp(rowData.timestamp)}`;
+    runCell.textContent = `#${rowData.runNumber}`;
     row.append(runCell);
 
     const mobileCell = document.createElement("td");
-    renderScoreCell(mobileCell, rowData.mobile, "mobile", renderContext);
+    renderScoreCell(mobileCell, rowData.mobile, "mobile", renderContext, tracker, rowData.runNumber);
     row.append(mobileCell);
 
     const desktopCell = document.createElement("td");
-    renderScoreCell(desktopCell, rowData.desktop, "desktop", renderContext);
+    renderScoreCell(desktopCell, rowData.desktop, "desktop", renderContext, tracker, rowData.runNumber);
     row.append(desktopCell);
 
     tbody.append(row);
@@ -919,10 +979,160 @@ function renderMetricSummary(tbody, mobileSummary, desktopSummary, renderContext
   }
 }
 
+function getAllRunScorePopulation() {
+  const values = [];
+  for (const tracker of state.trackers.values()) {
+    for (const mode of STRATEGIES) {
+      for (const sample of tracker.history[mode]) {
+        if (Number.isFinite(sample.performanceScore)) {
+          values.push(sample.performanceScore);
+        }
+      }
+    }
+  }
+  return values;
+}
+
+function closeRunDetailPanel() {
+  state.runDetail = null;
+  renderRunDetailPanel();
+}
+
+function openRunDetailPanel(tracker, mode, sample, runNumber) {
+  state.runDetail = {
+    url: tracker.url,
+    label: tracker.label || "",
+    mode,
+    sample,
+    runNumber,
+  };
+  renderRunDetailPanel();
+}
+
+function renderRunDetailPanel() {
+  if (!runDetailPanel || !runDetailBackdrop || !runDetailContent) {
+    return;
+  }
+
+  if (!state.runDetail) {
+    document.body.classList.remove("run-detail-open");
+    runDetailPanel.setAttribute("aria-hidden", "true");
+    runDetailBackdrop.hidden = true;
+    runDetailContent.innerHTML = "";
+    const placeholder = document.createElement("p");
+    placeholder.className = "placeholder";
+    placeholder.textContent = "Click any score in Score Runs to inspect that single run.";
+    runDetailContent.append(placeholder);
+    return;
+  }
+
+  document.body.classList.add("run-detail-open");
+  runDetailPanel.setAttribute("aria-hidden", "false");
+  runDetailBackdrop.hidden = false;
+  runDetailContent.innerHTML = "";
+
+  const detail = state.runDetail;
+
+  const title = document.createElement("h3");
+  title.className = "run-detail-title";
+  title.textContent = detail.label || "Unlabeled URL";
+  runDetailContent.append(title);
+
+  const urlLine = document.createElement("p");
+  urlLine.className = "run-detail-url";
+  urlLine.textContent = detail.url;
+  runDetailContent.append(urlLine);
+
+  const scorePopulation = getAllRunScorePopulation();
+  const runScore = detail.sample.performanceScore;
+  const runPercentile = getPercentile(scorePopulation, runScore, true);
+  const runScoreBackground = percentileColor(runPercentile);
+
+  const metaGrid = document.createElement("dl");
+  metaGrid.className = "run-detail-meta-grid";
+  const metaItems = [
+    ["Run", `#${detail.runNumber}`],
+    ["Mode", detail.mode],
+    ["Time", new Date(detail.sample.timestamp).toLocaleString()],
+    ["Performance", runScore.toFixed(1)],
+  ];
+  for (const [label, value] of metaItems) {
+    const item = document.createElement("div");
+    const dt = document.createElement("dt");
+    dt.textContent = label;
+    const dd = document.createElement("dd");
+    dd.textContent = value;
+    if (label === "Performance") {
+      dd.style.backgroundColor = runScoreBackground;
+      dd.style.color = textColorForBackground(runScoreBackground);
+      dd.className = "run-detail-score";
+    }
+    item.append(dt, dd);
+    metaGrid.append(item);
+  }
+  runDetailContent.append(metaGrid);
+
+  const metricTable = document.createElement("table");
+  metricTable.className = "run-detail-metric-table";
+  const head = document.createElement("thead");
+  head.innerHTML = "<tr><th>Metric</th><th>Value</th><th>LH Score</th><th>Points</th></tr>";
+  metricTable.append(head);
+  const body = document.createElement("tbody");
+
+  for (const metric of METRICS) {
+    const metricData = detail.sample.metrics[metric.key];
+    const row = document.createElement("tr");
+
+    const nameCell = document.createElement("td");
+    nameCell.textContent = metric.label;
+    row.append(nameCell);
+
+    const valueCell = document.createElement("td");
+    valueCell.textContent = metricData ? metric.format(metricData.value) : "--";
+    valueCell.className = "run-detail-num";
+    row.append(valueCell);
+
+    const scoreCell = document.createElement("td");
+    if (metricData && Number.isFinite(metricData.score)) {
+      const scoreValue = Math.max(0, Math.min(100, metricData.score));
+      scoreCell.textContent = scoreValue.toFixed(0);
+      scoreCell.style.backgroundColor = percentileColor(scoreValue);
+      scoreCell.style.color = textColorForBackground(scoreCell.style.backgroundColor);
+    } else {
+      scoreCell.textContent = "--";
+    }
+    scoreCell.className = "run-detail-num";
+    row.append(scoreCell);
+
+    const pointsCell = document.createElement("td");
+    if (metricData) {
+      const contribution = metricContribution(detail.mode, metric.key, metricData.value);
+      if (contribution) {
+        pointsCell.textContent = `${formatPointValue(contribution.points)} / ${formatPointValue(contribution.maxPoints)}`;
+        const percent = (contribution.points / contribution.maxPoints) * 100;
+        pointsCell.style.backgroundColor = percentileColor(percent);
+        pointsCell.style.color = textColorForBackground(pointsCell.style.backgroundColor);
+      } else {
+        pointsCell.textContent = "--";
+      }
+    } else {
+      pointsCell.textContent = "--";
+    }
+    pointsCell.className = "run-detail-num";
+    row.append(pointsCell);
+
+    body.append(row);
+  }
+
+  metricTable.append(body);
+  runDetailContent.append(metricTable);
+}
+
 function render() {
   const renderContext = buildRenderContext();
   renderCards(renderContext);
   renderComparisonTable(renderContext);
+  renderRunDetailPanel();
   refreshLiveStatusText();
 }
 
