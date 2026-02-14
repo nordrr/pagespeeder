@@ -318,6 +318,8 @@ button:disabled {
 .tile-meta-sub {
   font-size: 0.68rem;
   color: #374151;
+  white-space: pre-line;
+  line-height: 1.25;
 }
 
 .metric-summary-table {

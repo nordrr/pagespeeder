@@ -3,6 +3,7 @@ const STRATEGIES = ["mobile", "desktop"];
 const STORAGE_KEY = "pagespeed-tracker-state-v1";
 const SCORING_MODEL_VERSION = "v10";
 const TARGET_CI_HALF_WIDTH_POINTS = 2;
+const SECONDARY_CI_HALF_WIDTH_POINTS = 1;
 const LH_V10_CURVES = {
   mobile: {
     fcp: { weight: 0.10, median: 3000, p10: 1800 },
@@ -1023,7 +1024,7 @@ function renderSummaryTile(tile, summary, renderContext) {
     main.textContent = "Need runs";
     const sub = document.createElement("span");
     sub.className = "tile-meta-sub";
-    sub.textContent = "Need 2+ runs to estimate 95% CI target.";
+    sub.textContent = "stat sig ±2: ~? runs\nstat sig ±1: ~? runs";
     metaNode.append(main, sub);
     return;
   }
@@ -1032,16 +1033,16 @@ function renderSummaryTile(tile, summary, renderContext) {
   scoreNode.textContent = summary.avgScore.toFixed(1);
   const requiredRuns = summary.samples < 2
     ? null
-    : Math.max(
-      2,
-      Math.ceil(((1.96 * summary.scoreStdDev) / TARGET_CI_HALF_WIDTH_POINTS) ** 2),
-    );
+    : Math.max(2, Math.ceil(((1.96 * summary.scoreStdDev) / TARGET_CI_HALF_WIDTH_POINTS) ** 2));
+  const requiredRunsTight = summary.samples < 2
+    ? null
+    : Math.max(2, Math.ceil(((1.96 * summary.scoreStdDev) / SECONDARY_CI_HALF_WIDTH_POINTS) ** 2));
+  const moreRuns = requiredRuns === null ? null : Math.max(0, requiredRuns - summary.samples);
+  const moreRunsTight = requiredRunsTight === null ? null : Math.max(0, requiredRunsTight - summary.samples);
   const mainLine = `${formatConfidence(summary.ci95HalfWidth)} (${summary.samples} runs)`;
-  const subLine = requiredRuns === null
-    ? `Need 2+ runs to estimate target 95% CI ±${TARGET_CI_HALF_WIDTH_POINTS} pts.`
-    : requiredRuns <= summary.samples
-      ? `Estimated runs for 95% CI ±${TARGET_CI_HALF_WIDTH_POINTS} pts: ${requiredRuns} (target met)`
-      : `Estimated runs for 95% CI ±${TARGET_CI_HALF_WIDTH_POINTS} pts: ${requiredRuns} (${requiredRuns - summary.samples} more)`;
+  const subLine = requiredRuns === null || requiredRunsTight === null
+    ? "stat sig ±2: ~? runs\nstat sig ±1: ~? runs"
+    : `stat sig ±2: ~${requiredRuns} runs (+${moreRuns} more)\nstat sig ±1: ~${requiredRunsTight} runs (+${moreRunsTight} more)`;
 
   metaNode.innerHTML = "";
   const main = document.createElement("span");
