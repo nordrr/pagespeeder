@@ -413,7 +413,7 @@ button:disabled {
 .score-history-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.88rem;
+  font-size: 0.7rem;
   table-layout: fixed;
 }
 
@@ -440,14 +440,14 @@ button:disabled {
 
 .score-history-run {
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: 0.7rem;
   font-family: var(--font-mono);
 }
 
 .score-cell-mobile,
 .score-cell-desktop {
   font-weight: 700;
-  font-size: 1.03rem;
+  font-size: 0.7rem;
   font-family: var(--font-mono);
   padding: 0;
 }
@@ -503,7 +503,7 @@ button:disabled {
   color: inherit;
   width: 100%;
   font-family: var(--font-mono);
-  font-size: 1.02rem;
+  font-size: 0.7rem;
   font-weight: 700;
   padding: 4px 2px;
   cursor: pointer;

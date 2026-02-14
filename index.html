@@ -26,8 +26,8 @@
 
     <main>
       <section class="panel controls-panel">
-        <h2>Setup</h2>
-        <form id="setup-form" autocomplete="off">
+        <h2>Settings</h2>
+        <form id="settings-form" autocomplete="off">
           <label>
             Google API Key
             <input id="api-key" name="apiKey" type="password" placeholder="AIza..." required />
@@ -36,16 +36,23 @@
             Poll Interval (seconds)
             <input id="poll-interval" name="interval" type="number" min="60" step="1" value="60" required />
           </label>
+          <button type="submit">Save Settings</button>
+        </form>
+        <p class="hint">
+          Runs both <strong>mobile</strong> and <strong>desktop</strong> tests each cycle.
+          Confidence is shown as a 95% interval: <code>mean ± points</code>.
+        </p>
+      </section>
+
+      <section class="panel controls-panel">
+        <h2>Add URL</h2>
+        <form id="add-url-form" autocomplete="off">
           <label>
             URL
             <input id="url-input" name="url" type="url" placeholder="https://example.com" required />
           </label>
           <button type="submit">Add URL</button>
         </form>
-        <p class="hint">
-          Runs both <strong>mobile</strong> and <strong>desktop</strong> tests each cycle.
-          Confidence is shown as a 95% interval: <code>mean ± points</code>.
-        </p>
       </section>
 
       <section class="panel">

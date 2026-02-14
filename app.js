@@ -70,7 +70,8 @@ const state = {
   runDetail: null,
 };
 
-const setupForm = document.getElementById("setup-form");
+const settingsForm = document.getElementById("settings-form");
+const addUrlForm = document.getElementById("add-url-form");
 const apiKeyInput = document.getElementById("api-key");
 const pollIntervalInput = document.getElementById("poll-interval");
 const urlInput = document.getElementById("url-input");
@@ -113,7 +114,12 @@ for (const header of sortableHeaders) {
   });
 }
 
-setupForm.addEventListener("submit", (event) => {
+settingsForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  syncConfigFromInputs();
+});
+
+addUrlForm.addEventListener("submit", (event) => {
   event.preventDefault();
 
   if (!syncConfigFromInputs()) {
@@ -331,6 +337,7 @@ async function runCycle(tracker) {
   tracker.phase = "running";
   tracker.activeStrategy = null;
   tracker.cooldownUntil = null;
+  const cycleStartedAt = Date.now();
   render();
   persistState();
 
@@ -373,7 +380,9 @@ async function runCycle(tracker) {
     tracker.phase = "waiting";
     tracker.activeStrategy = null;
     tracker.cooldownUntil = null;
-    scheduleNext(tracker, state.pollIntervalSec * 1000);
+    const targetNextRunAt = cycleStartedAt + state.pollIntervalSec * 1000;
+    const delayMs = Math.max(0, targetNextRunAt - Date.now());
+    scheduleNext(tracker, delayMs);
   } else {
     tracker.phase = "paused";
     tracker.activeStrategy = null;
