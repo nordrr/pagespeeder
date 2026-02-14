@@ -39,6 +39,10 @@ const state = {
   apiKey: "",
   pollIntervalSec: 60,
   trackers: new Map(),
+  sort: {
+    key: null,
+    direction: null,
+  },
 };
 
 const setupForm = document.getElementById("setup-form");
@@ -47,10 +51,26 @@ const pollIntervalInput = document.getElementById("poll-interval");
 const urlInput = document.getElementById("url-input");
 const urlCardsContainer = document.getElementById("url-cards");
 const urlCardTemplate = document.getElementById("url-card-template");
+const sortableHeaders = Array.from(document.querySelectorAll("#comparison-table th.sortable"));
 const comparisonBody = document.getElementById("comparison-body");
 const startAllButton = document.getElementById("start-all");
 const stopAllButton = document.getElementById("stop-all");
 const clearAllButton = document.getElementById("clear-all");
+const SORTABLE_KEYS = new Set(["url", "mode", "avgScore", "confidence", "samples", "fcp", "si", "lcp", "tbt", "cls"]);
+
+for (const header of sortableHeaders) {
+  header.tabIndex = 0;
+  header.addEventListener("click", () => {
+    toggleSort(header.dataset.sortKey);
+  });
+  header.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") {
+      return;
+    }
+    event.preventDefault();
+    toggleSort(header.dataset.sortKey);
+  });
+}
 
 setupForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -494,6 +514,127 @@ function percentileRank(values, value) {
   return ((lower + 0.5 * equal) / values.length) * 100;
 }
 
+function toggleSort(key) {
+  if (!SORTABLE_KEYS.has(key)) {
+    return;
+  }
+
+  if (state.sort.key !== key) {
+    state.sort.key = key;
+    state.sort.direction = "asc";
+  } else if (state.sort.direction === "asc") {
+    state.sort.direction = "desc";
+  } else if (state.sort.direction === "desc") {
+    state.sort.key = null;
+    state.sort.direction = null;
+  } else {
+    state.sort.direction = "asc";
+  }
+
+  persistState();
+  render();
+}
+
+function updateSortHeaderIndicators() {
+  for (const header of sortableHeaders) {
+    header.classList.remove("sort-asc", "sort-desc");
+    if (header.dataset.sortKey === state.sort.key) {
+      header.classList.add(state.sort.direction === "desc" ? "sort-desc" : "sort-asc");
+    }
+  }
+}
+
+function compareNullableValues(aValue, bValue) {
+  const aMissing = aValue === null || aValue === undefined;
+  const bMissing = bValue === null || bValue === undefined;
+  if (aMissing && bMissing) {
+    return 0;
+  }
+  if (aMissing) {
+    return 1;
+  }
+  if (bMissing) {
+    return -1;
+  }
+  if (typeof aValue === "string" && typeof bValue === "string") {
+    return aValue.localeCompare(bValue);
+  }
+  return aValue - bValue;
+}
+
+function sortRows(rowsData) {
+  if (!state.sort.key || !state.sort.direction) {
+    return rowsData;
+  }
+
+  const directionFactor = state.sort.direction === "desc" ? -1 : 1;
+  const sorted = [...rowsData];
+  sorted.sort((a, b) => {
+    const result = compareNullableValues(a.sortValues[state.sort.key], b.sortValues[state.sort.key]);
+    return result * directionFactor;
+  });
+  return sorted;
+}
+
+function buildRunEntries(tracker) {
+  const entries = [];
+  for (const mode of STRATEGIES) {
+    for (const sample of tracker.history[mode]) {
+      entries.push({
+        mode,
+        sample,
+      });
+    }
+  }
+  entries.sort((a, b) => b.sample.timestamp - a.sample.timestamp);
+  return entries.slice(0, 200);
+}
+
+function renderRunLog(container, tracker) {
+  container.innerHTML = "";
+  const entries = buildRunEntries(tracker);
+
+  if (!entries.length) {
+    const empty = document.createElement("p");
+    empty.className = "run-log-empty";
+    empty.textContent = "No runs yet.";
+    container.append(empty);
+    return;
+  }
+
+  for (const entry of entries) {
+    const wrapper = document.createElement("article");
+    wrapper.className = "run-entry";
+
+    const header = document.createElement("div");
+    header.className = "run-entry-header";
+
+    const left = document.createElement("span");
+    left.className = "run-entry-mode";
+    left.textContent = `${entry.mode} • ${formatTimestamp(entry.sample.timestamp)}`;
+
+    const right = document.createElement("span");
+    right.className = "run-entry-score";
+    right.textContent = `Score ${entry.sample.performanceScore.toFixed(1)}`;
+
+    header.append(left, right);
+    wrapper.append(header);
+
+    const metrics = document.createElement("div");
+    metrics.className = "run-entry-metrics";
+    metrics.textContent = METRICS.map((metric) => {
+      const value = entry.sample.metrics[metric.key]?.value;
+      if (typeof value !== "number") {
+        return `${metric.label}: --`;
+      }
+      return `${metric.label}: ${metric.format(value)}`;
+    }).join(" • ");
+
+    wrapper.append(metrics);
+    container.append(wrapper);
+  }
+}
+
 function render() {
   renderCards();
   renderComparisonTable();
@@ -518,6 +659,7 @@ function renderCards() {
     const toggleButton = fragment.querySelector(".toggle-run");
     const runNowButton = fragment.querySelector(".run-now");
     const removeButton = fragment.querySelector(".remove");
+    const runLog = fragment.querySelector(".run-log");
     const errorText = fragment.querySelector(".error-text");
 
     title.textContent = tracker.url;
@@ -570,12 +712,14 @@ function renderCards() {
       lastRunNode.textContent = formatTimestamp(summary.latestTimestamp);
     }
 
+    renderRunLog(runLog, tracker);
     errorText.textContent = tracker.lastError;
     urlCardsContainer.append(fragment);
   }
 }
 
 function renderComparisonTable() {
+  updateSortHeaderIndicators();
   comparisonBody.innerHTML = "";
 
   if (!state.trackers.size) {
@@ -597,9 +741,35 @@ function renderComparisonTable() {
         url: tracker.url,
         mode,
         summary: summarize(tracker.history[mode]),
+        sortValues: {
+          url: tracker.url.toLowerCase(),
+          mode,
+          avgScore: null,
+          confidence: null,
+          samples: null,
+          fcp: null,
+          si: null,
+          lcp: null,
+          tbt: null,
+          cls: null,
+        },
       });
     }
   }
+
+  for (const rowData of rowsData) {
+    if (!rowData.summary) {
+      continue;
+    }
+    rowData.sortValues.avgScore = rowData.summary.avgScore;
+    rowData.sortValues.confidence = rowData.summary.ci95HalfWidth;
+    rowData.sortValues.samples = rowData.summary.samples;
+    for (const metric of METRICS) {
+      rowData.sortValues[metric.key] = rowData.summary.metrics[metric.key].avgValue;
+    }
+  }
+
+  const sortedRows = sortRows(rowsData);
 
   const scorePopulation = rowsData
     .filter((rowData) => rowData.summary)
@@ -612,7 +782,7 @@ function renderComparisonTable() {
       .map((rowData) => rowData.summary.metrics[metric.key].avgScore);
   }
 
-  for (const rowData of rowsData) {
+  for (const rowData of sortedRows) {
     const row = document.createElement("tr");
 
     const urlCell = document.createElement("td");
@@ -681,6 +851,7 @@ function persistState() {
       apiKey: state.apiKey,
       pollIntervalSec: state.pollIntervalSec,
       trackers: Array.from(state.trackers.values()).map(serializeTracker),
+      sort: state.sort,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
   } catch (error) {
@@ -707,6 +878,17 @@ function hydrateState() {
     if (Number.isFinite(parsed.pollIntervalSec) && parsed.pollIntervalSec >= 60) {
       state.pollIntervalSec = parsed.pollIntervalSec;
       pollIntervalInput.value = String(parsed.pollIntervalSec);
+    }
+
+    if (parsed.sort && typeof parsed.sort === "object") {
+      const sortKey = typeof parsed.sort.key === "string" ? parsed.sort.key : null;
+      const sortDirection = parsed.sort.direction === "asc" || parsed.sort.direction === "desc"
+        ? parsed.sort.direction
+        : null;
+      if (sortKey && sortDirection && SORTABLE_KEYS.has(sortKey)) {
+        state.sort.key = sortKey;
+        state.sort.direction = sortDirection;
+      }
     }
 
     if (Array.isArray(parsed.trackers)) {

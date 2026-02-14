@@ -56,16 +56,16 @@
           <table id="comparison-table">
             <thead>
               <tr>
-                <th>URL</th>
-                <th>Mode</th>
-                <th>Avg Score</th>
-                <th>95% Confidence</th>
-                <th>Samples</th>
-                <th>FCP</th>
-                <th>SI</th>
-                <th>LCP</th>
-                <th>TBT</th>
-                <th>CLS</th>
+                <th data-sort-key="url" class="sortable">URL</th>
+                <th data-sort-key="mode" class="sortable">Mode</th>
+                <th data-sort-key="avgScore" class="sortable">Avg Score</th>
+                <th data-sort-key="confidence" class="sortable">95% Confidence</th>
+                <th data-sort-key="samples" class="sortable">Samples</th>
+                <th data-sort-key="fcp" class="sortable">FCP</th>
+                <th data-sort-key="si" class="sortable">SI</th>
+                <th data-sort-key="lcp" class="sortable">LCP</th>
+                <th data-sort-key="tbt" class="sortable">TBT</th>
+                <th data-sort-key="cls" class="sortable">CLS</th>
               </tr>
             </thead>
             <tbody id="comparison-body">
@@ -111,6 +111,10 @@
             </dl>
           </section>
         </div>
+        <section class="run-log-section">
+          <h4>Run History</h4>
+          <div class="run-log" aria-live="polite"></div>
+        </section>
         <p class="error-text"></p>
       </article>
     </template>

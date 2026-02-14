@@ -15,6 +15,8 @@ Track Google PageSpeed Insights repeatedly, average the results, and compare mul
   - Cumulative Layout Shift (CLS)
 - Computes a **95% confidence interval** for average score as `mean ± points`.
 - Compares multiple URLs in a percentile-colored table (higher percentile = greener).
+- Includes per-URL scrollable run history with each sample's score + metrics.
+- Supports clickable table-header sorting (asc, desc, then back to default order).
 - Shows live per-URL status (waiting for Google response vs waiting for timer).
 - Persists API key, URLs, and collected history in browser local storage.
 - No signup/auth system. User enters their own Google API key.

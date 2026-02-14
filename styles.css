@@ -209,6 +209,63 @@ button:disabled {
   font-size: 0.85rem;
 }
 
+.run-log-section {
+  margin-top: 10px;
+}
+
+.run-log-section h4 {
+  margin: 0 0 6px;
+  font-size: 0.9rem;
+}
+
+.run-log {
+  max-height: 140px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  padding: 6px;
+  display: grid;
+  gap: 6px;
+}
+
+.run-log-empty {
+  color: var(--muted);
+  font-size: 0.83rem;
+  margin: 2px 0;
+}
+
+.run-entry {
+  font-size: 0.82rem;
+  border: 1px solid #e3eaf4;
+  border-radius: 6px;
+  padding: 5px 6px;
+  background: #f8fbff;
+}
+
+.run-entry-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.run-entry-mode {
+  text-transform: uppercase;
+  font-weight: 700;
+  font-size: 0.74rem;
+  letter-spacing: 0.03em;
+  color: #244575;
+}
+
+.run-entry-score {
+  font-weight: 700;
+}
+
+.run-entry-metrics {
+  color: #30445f;
+}
+
 .table-wrap {
   overflow-x: auto;
 }
@@ -232,6 +289,27 @@ th {
   color: #2a3f64;
   position: sticky;
   top: 0;
+}
+
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+th.sortable::after {
+  content: " \u21C5";
+  color: #8ea3c3;
+  font-size: 0.82rem;
+}
+
+th.sortable.sort-asc::after {
+  content: " \u2191";
+  color: #3a5d93;
+}
+
+th.sortable.sort-desc::after {
+  content: " \u2193";
+  color: #3a5d93;
 }
 
 .placeholder {
