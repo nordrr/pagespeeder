@@ -488,16 +488,15 @@ async function runCycle(tracker) {
   persistState();
 
   const cycleStrategies = getStrategiesForCycle(tracker);
-  for (const strategy of cycleStrategies) {
-    if (!tracker.running) {
-      break;
-    }
-
+  const pendingStrategies = new Set(cycleStrategies);
+  if (pendingStrategies.size > 0) {
     tracker.phase = "awaiting-google";
-    tracker.activeStrategy = strategy;
+    tracker.activeStrategy = pendingStrategies.size > 1 ? "both" : cycleStrategies[0];
     render();
     persistState();
+  }
 
+  const strategyRuns = cycleStrategies.map((strategy) => (async () => {
     try {
       const sample = await fetchPsiSample(tracker.url, strategy, state.apiKey);
       tracker.history[strategy].push(sample);
@@ -506,12 +505,19 @@ async function runCycle(tracker) {
     } catch (error) {
       tracker.lastError = `${strategy}: ${error.message}`;
       persistState();
+    } finally {
+      pendingStrategies.delete(strategy);
+      if (pendingStrategies.size > 0) {
+        const [remainingStrategy] = pendingStrategies;
+        tracker.phase = "awaiting-google";
+        tracker.activeStrategy = pendingStrategies.size > 1 ? "both" : remainingStrategy;
+        render();
+        persistState();
+      }
     }
+  })());
 
-    if (!tracker.running) {
-      break;
-    }
-  }
+  await Promise.all(strategyRuns);
 
   tracker.inFlight = false;
   if (tracker.running) {
@@ -839,12 +845,19 @@ function formatCountdown(timestamp) {
   return `${secondsLeft}s`;
 }
 
+function formatStrategyLabel(strategy) {
+  if (strategy === "both") {
+    return "mobile + desktop";
+  }
+  return strategy || "--";
+}
+
 function describeTrackerStatus(tracker) {
   if (tracker.phase === "awaiting-google") {
     if (!tracker.running) {
-      return `Paused (waiting for Google PageSpeed result: ${tracker.activeStrategy})`;
+      return `Paused (waiting for Google PageSpeed result: ${formatStrategyLabel(tracker.activeStrategy)})`;
     }
-    return `Waiting for Google PageSpeed result (${tracker.activeStrategy})`;
+    return `Waiting for Google PageSpeed result (${formatStrategyLabel(tracker.activeStrategy)})`;
   }
 
   if (!tracker.running) {
@@ -1053,7 +1066,7 @@ function getPendingStatus(tracker, rowData, mode) {
   }
 
   if (tracker.phase === "awaiting-google") {
-    if (tracker.activeStrategy === mode) {
+    if (tracker.activeStrategy === "both" || tracker.activeStrategy === mode) {
       return { kind: "google", text: "Google" };
     }
     return { kind: "queued", text: "Queued" };
