@@ -705,6 +705,16 @@ function formatPointValue(value) {
   return value.toFixed(1);
 }
 
+function contributionPointsForDisplay(strategy, metricKey, value) {
+  const contribution = metricContribution(strategy, metricKey, value);
+  if (!contribution) {
+    return null;
+  }
+  const formatted = formatPointValue(contribution.points);
+  const parsed = Number.parseFloat(formatted);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function formatContributionText(strategy, metricKey, value) {
   const contribution = metricContribution(strategy, metricKey, value);
   if (!contribution) {
@@ -980,7 +990,10 @@ function buildRenderContext() {
         for (const metric of METRICS) {
           const value = sample.metrics?.[metric.key]?.value;
           if (Number.isFinite(value)) {
-            metricPopulationsByMode[mode][metric.key].push(value);
+            const points = contributionPointsForDisplay(mode, metric.key, value);
+            if (Number.isFinite(points)) {
+              metricPopulationsByMode[mode][metric.key].push(points);
+            }
           }
         }
       }
@@ -1222,10 +1235,11 @@ function renderMetricSummary(tbody, mobileSummary, desktopSummary, renderContext
     if (!mobileMetric) {
       mobileCell.textContent = "--";
     } else {
+      const pointsForColor = contributionPointsForDisplay("mobile", metric.key, mobileMetric.avgValue);
       const percentile = getPercentile(
         renderContext.metricPopulationsByMode.mobile[metric.key],
-        mobileMetric.avgValue,
-        metric.higherIsBetter,
+        pointsForColor,
+        true,
       );
       mobileCell.style.backgroundColor = percentileColor(percentile);
       mobileCell.append(
@@ -1245,10 +1259,11 @@ function renderMetricSummary(tbody, mobileSummary, desktopSummary, renderContext
     if (!desktopMetric) {
       desktopCell.textContent = "--";
     } else {
+      const pointsForColor = contributionPointsForDisplay("desktop", metric.key, desktopMetric.avgValue);
       const percentile = getPercentile(
         renderContext.metricPopulationsByMode.desktop[metric.key],
-        desktopMetric.avgValue,
-        metric.higherIsBetter,
+        pointsForColor,
+        true,
       );
       desktopCell.style.backgroundColor = percentileColor(percentile);
       desktopCell.append(
@@ -1670,10 +1685,11 @@ function renderComparisonTable(renderContext) {
       const metricCell = document.createElement("td");
       metricCell.className = "comparison-color-cell";
       const metricResult = rowData.summary.metrics[metric.key];
+      const pointsForColor = contributionPointsForDisplay(rowData.mode, metric.key, metricResult.avgValue);
       const percentile = getPercentile(
         renderContext.metricPopulationsByMode[rowData.mode][metric.key],
-        metricResult.avgValue,
-        metric.higherIsBetter,
+        pointsForColor,
+        true,
       );
       metricCell.style.backgroundColor = percentileColor(percentile);
       const bubble = createMetricValueBlock(
