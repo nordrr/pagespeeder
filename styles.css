@@ -241,16 +241,35 @@ button:disabled {
   line-height: 1.1;
 }
 
-.metric-cell-value {
-  font-weight: 800;
-  font-size: 0.9rem;
+.metric-cell-no-bg {
+  background: transparent !important;
+  min-width: 0;
+  width: 100%;
+  padding: 0;
 }
 
-.metric-cell-points {
+.metric-points-line {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+}
+
+.metric-points-big {
+  font-weight: 800;
+  font-size: 1.02rem;
+}
+
+.metric-points-small {
+  font-weight: 500;
+  font-size: 0.71rem;
+  color: #31455f;
+}
+
+.metric-raw-value {
   font-weight: 500;
   font-size: 0.72rem;
   color: #31455f;
-  margin-top: 2px;
+  margin-top: 1px;
 }
 
 .error-text {
@@ -365,12 +384,14 @@ th.sortable.sort-desc::after {
   padding: 14px;
 }
 
-.cell-colored {
-  border-radius: 4px;
-  padding: 3px 7px;
-  display: inline-block;
-  min-width: 72px;
+.comparison-color-cell {
   text-align: center;
+  vertical-align: middle;
+}
+
+.comparison-score-cell {
+  font-weight: 800;
+  font-size: 0.95rem;
 }
 
 @media (max-width: 720px) {

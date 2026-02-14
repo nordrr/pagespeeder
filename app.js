@@ -508,24 +508,42 @@ function formatPointValue(value) {
 function formatContributionText(strategy, metricKey, value) {
   const contribution = metricContribution(strategy, metricKey, value);
   if (!contribution) {
-    return "(--/-- pts)";
+    return { points: "--", outOf: "out of -- pts" };
   }
-  return `(${formatPointValue(contribution.points)}/${formatPointValue(contribution.maxPoints)} pts)`;
+  return {
+    points: formatPointValue(contribution.points),
+    outOf: `out of ${formatPointValue(contribution.maxPoints)} pts`,
+  };
 }
 
-function createMetricValueBlock(metric, value, percentile, strategy) {
+function createMetricValueBlock(metric, value, percentile, strategy, withBackground = true) {
   const block = document.createElement("span");
   block.className = "metric-cell";
-  block.style.backgroundColor = percentileColor(percentile);
+  if (withBackground) {
+    block.style.backgroundColor = percentileColor(percentile);
+  } else {
+    block.classList.add("metric-cell-no-bg");
+  }
+
+  const contribution = formatContributionText(strategy, metric.key, value);
 
   const pointsLine = document.createElement("span");
-  pointsLine.className = "metric-cell-value";
-  pointsLine.textContent = formatContributionText(strategy, metric.key, value);
-  pointsLine.title = `${SCORING_MODEL_VERSION} metric contribution`;
+  pointsLine.className = "metric-points-line";
+
+  const pointsBig = document.createElement("span");
+  pointsBig.className = "metric-points-big";
+  pointsBig.textContent = contribution.points;
+  pointsBig.title = `${SCORING_MODEL_VERSION} metric contribution`;
+
+  const pointsSmall = document.createElement("span");
+  pointsSmall.className = "metric-points-small";
+  pointsSmall.textContent = contribution.outOf;
+
+  pointsLine.append(pointsBig, pointsSmall);
   block.append(pointsLine);
 
   const valueLine = document.createElement("span");
-  valueLine.className = "metric-cell-points";
+  valueLine.className = "metric-raw-value";
   valueLine.textContent = metric.format(value);
   block.append(valueLine);
 
@@ -566,17 +584,6 @@ function getPercentile(population, value, higherIsBetter = true) {
 
   const raw = percentileRank(population, value);
   return higherIsBetter ? raw : 100 - raw;
-}
-
-function scoreCell(text, percentile) {
-  const span = document.createElement("span");
-  span.className = "cell-colored";
-  span.style.backgroundColor = percentileColor(percentile);
-  span.textContent = text;
-  if (Number.isFinite(percentile)) {
-    span.title = `Percentile: ${Math.round(percentile)}`;
-  }
-  return span;
 }
 
 function formatConfidence(ciValue) {
@@ -1052,7 +1059,9 @@ function renderComparisonTable(renderContext) {
 
     const scorePercentile = getPercentile(renderContext.scoreSummaryPopulation, rowData.summary.avgScore, true);
     const scoreAvgCell = document.createElement("td");
-    scoreAvgCell.append(scoreCell(rowData.summary.avgScore.toFixed(1), scorePercentile));
+    scoreAvgCell.className = "comparison-color-cell comparison-score-cell";
+    scoreAvgCell.style.backgroundColor = percentileColor(scorePercentile);
+    scoreAvgCell.textContent = rowData.summary.avgScore.toFixed(1);
     row.append(scoreAvgCell);
 
     const confidenceCell = document.createElement("td");
@@ -1065,13 +1074,21 @@ function renderComparisonTable(renderContext) {
 
     for (const metric of METRICS) {
       const metricCell = document.createElement("td");
+      metricCell.className = "comparison-color-cell";
       const metricResult = rowData.summary.metrics[metric.key];
       const percentile = getPercentile(
         renderContext.metricPopulations[metric.key],
         metricResult.avgValue,
         metric.higherIsBetter,
       );
-      const bubble = createMetricValueBlock(metric, metricResult.avgValue, percentile, rowData.mode);
+      metricCell.style.backgroundColor = percentileColor(percentile);
+      const bubble = createMetricValueBlock(
+        metric,
+        metricResult.avgValue,
+        percentile,
+        rowData.mode,
+        false,
+      );
       metricCell.append(bubble);
       row.append(metricCell);
     }
