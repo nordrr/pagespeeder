@@ -443,6 +443,45 @@ button:disabled {
   font-family: var(--font-mono);
 }
 
+.score-cell-pending {
+  padding: 0 !important;
+}
+
+.run-pending {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 100%;
+  padding: 5px 3px;
+  font-size: 0.72rem;
+  font-family: var(--font-sans);
+}
+
+.run-spinner {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 2px solid #9ca3af;
+  border-top-color: #374151;
+  animation: run-spin 0.9s linear infinite;
+}
+
+.run-hourglass {
+  font-size: 0.74rem;
+}
+
+.run-pending-text {
+  color: #4b5563;
+  font-weight: 600;
+}
+
+@keyframes run-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .run-score-button {
   appearance: none;
   border: 0;

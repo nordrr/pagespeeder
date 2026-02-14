@@ -834,14 +834,92 @@ function buildScoreRows(tracker, limit = 200) {
       timestamp,
       mobile,
       desktop,
+      isPartial: Boolean((mobile && !desktop) || (!mobile && desktop)),
+      pending: false,
+    });
+  }
+
+  const shouldShowPending =
+    tracker.running &&
+    mobileSamples.length === desktopSamples.length &&
+    (tracker.phase === "waiting" ||
+      tracker.phase === "queued" ||
+      tracker.phase === "running" ||
+      tracker.phase === "awaiting-google" ||
+      tracker.phase === "cooldown");
+
+  if (shouldShowPending) {
+    rows.unshift({
+      runNumber: total + 1,
+      timestamp: tracker.nextRunAt || Date.now(),
+      mobile: null,
+      desktop: null,
+      isPartial: false,
+      pending: true,
     });
   }
 
   return rows;
 }
 
-function renderScoreCell(cell, sample, mode, renderContext, tracker, runNumber) {
+function getPendingStatus(tracker, rowData, mode) {
+  if (!tracker.running || (!rowData.pending && !rowData.isPartial)) {
+    return null;
+  }
+
+  if (tracker.phase === "awaiting-google") {
+    if (tracker.activeStrategy === mode) {
+      return { kind: "google", text: "Google" };
+    }
+    return { kind: "queued", text: "Queued" };
+  }
+
+  if (tracker.phase === "cooldown") {
+    return { kind: "timer", text: "Cooldown" };
+  }
+
+  if (tracker.phase === "running" || tracker.phase === "queued" || tracker.phase === "waiting") {
+    return { kind: "timer", text: "Waiting" };
+  }
+
+  return null;
+}
+
+function renderPendingCell(cell, status) {
+  cell.className = "score-cell-pending";
+  cell.style.backgroundColor = "#edf0f5";
+  cell.style.color = "#4b5563";
+  cell.innerHTML = "";
+
+  const wrapper = document.createElement("span");
+  wrapper.className = "run-pending";
+
+  if (status.kind === "google") {
+    const spinner = document.createElement("span");
+    spinner.className = "run-spinner";
+    wrapper.append(spinner);
+  } else {
+    const hourglass = document.createElement("span");
+    hourglass.className = "run-hourglass";
+    hourglass.textContent = "⏳";
+    wrapper.append(hourglass);
+  }
+
+  const text = document.createElement("span");
+  text.className = "run-pending-text";
+  text.textContent = status.text;
+  wrapper.append(text);
+  cell.append(wrapper);
+}
+
+function renderScoreCell(cell, sample, mode, renderContext, tracker, rowData) {
   if (!sample) {
+    const status = getPendingStatus(tracker, rowData, mode);
+    if (status) {
+      renderPendingCell(cell, status);
+      return;
+    }
+
     cell.className = "score-cell-empty";
     cell.style.backgroundColor = "";
     cell.style.color = "";
@@ -862,7 +940,7 @@ function renderScoreCell(cell, sample, mode, renderContext, tracker, runNumber) 
   button.className = "run-score-button";
   button.textContent = score.toFixed(0);
   button.addEventListener("click", () => {
-    openRunDetailPanel(tracker, mode, sample, runNumber);
+    openRunDetailPanel(tracker, mode, sample, rowData.runNumber);
   });
 
   cell.append(button);
@@ -886,15 +964,15 @@ function renderScoreHistory(tbody, tracker, renderContext) {
     const row = document.createElement("tr");
     const runCell = document.createElement("td");
     runCell.className = "score-history-run";
-    runCell.textContent = `#${rowData.runNumber}`;
+    runCell.textContent = rowData.pending ? `#${rowData.runNumber} next` : `#${rowData.runNumber}`;
     row.append(runCell);
 
     const mobileCell = document.createElement("td");
-    renderScoreCell(mobileCell, rowData.mobile, "mobile", renderContext, tracker, rowData.runNumber);
+    renderScoreCell(mobileCell, rowData.mobile, "mobile", renderContext, tracker, rowData);
     row.append(mobileCell);
 
     const desktopCell = document.createElement("td");
-    renderScoreCell(desktopCell, rowData.desktop, "desktop", renderContext, tracker, rowData.runNumber);
+    renderScoreCell(desktopCell, rowData.desktop, "desktop", renderContext, tracker, rowData);
     row.append(desktopCell);
 
     tbody.append(row);
