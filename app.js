@@ -86,7 +86,14 @@ const runDetailBackdrop = document.getElementById("run-detail-backdrop");
 const runDetailPanel = document.getElementById("run-detail-panel");
 const runDetailCloseButton = document.getElementById("run-detail-close");
 const runDetailContent = document.getElementById("run-detail-content");
+const uiTooltip = document.getElementById("ui-tooltip");
 const SORTABLE_KEYS = new Set(["url", "mode", "avgScore", "confidence", "samples", "fcp", "si", "lcp", "tbt", "cls"]);
+const TOOLTIP_DELAY_MS = 500;
+const TOOLTIP_HIDE_GRACE_MS = 120;
+
+let tooltipAnchor = null;
+let tooltipShowTimerId = null;
+let tooltipHideTimerId = null;
 
 runDetailCloseButton?.addEventListener("click", () => {
   closeRunDetailPanel();
@@ -99,6 +106,8 @@ document.addEventListener("keydown", (event) => {
     closeRunDetailPanel();
   }
 });
+window.addEventListener("scroll", () => hideTooltip(), true);
+window.addEventListener("resize", () => hideTooltip());
 
 for (const header of sortableHeaders) {
   header.tabIndex = 0;
@@ -284,6 +293,135 @@ function removeTracker(url) {
   }
   persistState();
   render();
+}
+
+function hideTooltip() {
+  if (tooltipShowTimerId) {
+    clearTimeout(tooltipShowTimerId);
+    tooltipShowTimerId = null;
+  }
+  if (tooltipHideTimerId) {
+    clearTimeout(tooltipHideTimerId);
+    tooltipHideTimerId = null;
+  }
+  if (!uiTooltip) {
+    return;
+  }
+  uiTooltip.classList.remove("visible");
+  uiTooltip.hidden = true;
+  tooltipAnchor = null;
+}
+
+function isTooltipTarget(node) {
+  return Boolean(node instanceof Element && node.closest("[data-tooltip]"));
+}
+
+function positionTooltip() {
+  if (!uiTooltip || !tooltipAnchor) {
+    return;
+  }
+
+  const rect = tooltipAnchor.getBoundingClientRect();
+  const spacing = 8;
+  const width = uiTooltip.offsetWidth;
+  const height = uiTooltip.offsetHeight;
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+
+  let left = rect.left + rect.width / 2 - width / 2;
+  left = Math.max(6, Math.min(left, viewportWidth - width - 6));
+
+  let top = rect.top - height - spacing;
+  if (top < 6) {
+    top = rect.bottom + spacing;
+  }
+  if (top + height > viewportHeight - 6) {
+    top = Math.max(6, viewportHeight - height - 6);
+  }
+
+  uiTooltip.style.left = `${left}px`;
+  uiTooltip.style.top = `${top}px`;
+}
+
+function showTooltipNow(text, anchor) {
+  if (!uiTooltip || !text || !anchor) {
+    return;
+  }
+  uiTooltip.textContent = text;
+  tooltipAnchor = anchor;
+  uiTooltip.hidden = false;
+  positionTooltip();
+  requestAnimationFrame(() => {
+    if (uiTooltip) {
+      uiTooltip.classList.add("visible");
+    }
+  });
+}
+
+function showTooltip(text, anchor, instant = false) {
+  if (!text || !anchor) {
+    return;
+  }
+
+  if (tooltipHideTimerId) {
+    clearTimeout(tooltipHideTimerId);
+    tooltipHideTimerId = null;
+  }
+
+  const tooltipAlreadyVisible = Boolean(uiTooltip && !uiTooltip.hidden && uiTooltip.classList.contains("visible"));
+  if (instant || tooltipAlreadyVisible) {
+    if (tooltipShowTimerId) {
+      clearTimeout(tooltipShowTimerId);
+      tooltipShowTimerId = null;
+    }
+    showTooltipNow(text, anchor);
+    return;
+  }
+
+  if (tooltipShowTimerId) {
+    clearTimeout(tooltipShowTimerId);
+  }
+  tooltipShowTimerId = setTimeout(() => {
+    tooltipShowTimerId = null;
+    showTooltipNow(text, anchor);
+  }, TOOLTIP_DELAY_MS);
+}
+
+function scheduleTooltipHide() {
+  if (tooltipShowTimerId) {
+    clearTimeout(tooltipShowTimerId);
+    tooltipShowTimerId = null;
+  }
+  if (tooltipHideTimerId) {
+    clearTimeout(tooltipHideTimerId);
+  }
+  tooltipHideTimerId = setTimeout(() => {
+    tooltipHideTimerId = null;
+    hideTooltip();
+  }, TOOLTIP_HIDE_GRACE_MS);
+}
+
+function attachTooltipHandlers(element) {
+  if (!element) {
+    return;
+  }
+
+  const getText = () => element.dataset.tooltip || "";
+  element.addEventListener("mouseenter", () => {
+    showTooltip(getText(), element, false);
+  });
+  element.addEventListener("mouseleave", (event) => {
+    if (isTooltipTarget(event.relatedTarget)) {
+      return;
+    }
+    scheduleTooltipHide();
+  });
+  element.addEventListener("focus", () => {
+    showTooltip(getText(), element, true);
+  });
+  element.addEventListener("blur", () => {
+    scheduleTooltipHide();
+  });
 }
 
 function scheduleNext(tracker, delayMs) {
@@ -1366,7 +1504,15 @@ function renderCards(renderContext) {
 
     meta.textContent = `Status: ${describeTrackerStatus(tracker)}`;
 
-    toggleButton.textContent = tracker.running ? "Pause" : "Resume";
+    const iconPlay = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
+    const iconPause = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zm6 0h4v14h-4z"/></svg>';
+    const iconRunNow = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2L8 6l4 4V7c3.3 0 6 2.7 6 6 0 1.4-.5 2.7-1.3 3.7l1.5 1.5A7.95 7.95 0 0 0 20 13c0-4.4-3.6-8-8-8zM6 13c0-1.4.5-2.7 1.3-3.7L5.8 7.8A7.95 7.95 0 0 0 4 13c0 4.4 3.6 8 8 8v3l4-4-4-4v3c-3.3 0-6-2.7-6-6z"/></svg>';
+    const iconTrash = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v9h-2V9zm4 0h2v9h-2V9zM7 9h2v9H7V9z"/></svg>';
+
+    toggleButton.innerHTML = tracker.running ? iconPause : iconPlay;
+    toggleButton.setAttribute("aria-label", tracker.running ? "Pause" : "Resume");
+    toggleButton.dataset.tooltip = tracker.running ? "Pause" : "Resume";
+    attachTooltipHandlers(toggleButton);
     toggleButton.addEventListener("click", () => {
       if (tracker.running) {
         stopTracker(tracker);
@@ -1377,6 +1523,10 @@ function renderCards(renderContext) {
     });
 
     runNowButton.disabled = tracker.inFlight;
+    runNowButton.innerHTML = iconRunNow;
+    runNowButton.setAttribute("aria-label", "Run now");
+    runNowButton.dataset.tooltip = "Run now";
+    attachTooltipHandlers(runNowButton);
     runNowButton.addEventListener("click", () => {
       if (!syncConfigFromInputs()) {
         return;
@@ -1384,6 +1534,10 @@ function renderCards(renderContext) {
       startTracker(tracker, true);
     });
 
+    removeButton.innerHTML = iconTrash;
+    removeButton.setAttribute("aria-label", "Remove");
+    removeButton.dataset.tooltip = "Remove";
+    attachTooltipHandlers(removeButton);
     removeButton.addEventListener("click", () => removeTracker(tracker.url));
 
     const summaries = renderContext.summariesByUrl.get(tracker.url) || {};
