@@ -2,6 +2,7 @@ const PSI_ENDPOINT = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed
 const STRATEGIES = ["mobile", "desktop"];
 const STORAGE_KEY = "pagespeed-tracker-state-v1";
 const SCORING_MODEL_VERSION = "v10";
+const TARGET_CI_HALF_WIDTH_POINTS = 2;
 const LH_V10_CURVES = {
   mobile: {
     fcp: { weight: 0.10, median: 3000, p10: 1800 },
@@ -447,6 +448,7 @@ function summarize(samples) {
   return {
     samples: samples.length,
     avgScore: mean(scoreValues),
+    scoreStdDev: stdDevSample(scoreValues),
     ci95HalfWidth: ci95(scoreValues),
     latestTimestamp: samples[samples.length - 1].timestamp,
     metrics: metricSummary,
@@ -1015,13 +1017,41 @@ function renderSummaryTile(tile, summary, renderContext) {
 
   if (!summary) {
     scoreNode.textContent = "--";
-    metaNode.textContent = "Need runs";
+    metaNode.innerHTML = "";
+    const main = document.createElement("span");
+    main.className = "tile-meta-main";
+    main.textContent = "Need runs";
+    const sub = document.createElement("span");
+    sub.className = "tile-meta-sub";
+    sub.textContent = "Need 2+ runs to estimate 95% CI target.";
+    metaNode.append(main, sub);
     return;
   }
 
   const percentile = getPercentile(renderContext.scoreSummaryPopulation, summary.avgScore, true);
   scoreNode.textContent = summary.avgScore.toFixed(1);
-  metaNode.textContent = `${formatConfidence(summary.ci95HalfWidth)} (${summary.samples} runs)`;
+  const requiredRuns = summary.samples < 2
+    ? null
+    : Math.max(
+      2,
+      Math.ceil(((1.96 * summary.scoreStdDev) / TARGET_CI_HALF_WIDTH_POINTS) ** 2),
+    );
+  const mainLine = `${formatConfidence(summary.ci95HalfWidth)} (${summary.samples} runs)`;
+  const subLine = requiredRuns === null
+    ? `Need 2+ runs to estimate target 95% CI ±${TARGET_CI_HALF_WIDTH_POINTS} pts.`
+    : requiredRuns <= summary.samples
+      ? `Estimated runs for 95% CI ±${TARGET_CI_HALF_WIDTH_POINTS} pts: ${requiredRuns} (target met)`
+      : `Estimated runs for 95% CI ±${TARGET_CI_HALF_WIDTH_POINTS} pts: ${requiredRuns} (${requiredRuns - summary.samples} more)`;
+
+  metaNode.innerHTML = "";
+  const main = document.createElement("span");
+  main.className = "tile-meta-main";
+  main.textContent = mainLine;
+  const sub = document.createElement("span");
+  sub.className = "tile-meta-sub";
+  sub.textContent = subLine;
+  metaNode.append(main, sub);
+
   tile.style.backgroundColor = percentileColor(percentile);
   tile.style.borderColor = "#b8c6d9";
 }
