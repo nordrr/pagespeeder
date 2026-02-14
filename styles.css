@@ -159,6 +159,85 @@ button:disabled {
   word-break: break-word;
 }
 
+.url-identity {
+  display: grid;
+  gap: 5px;
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.url-card-title {
+  appearance: none;
+  border: 1px dashed transparent;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  padding: 4px 6px;
+  border-radius: 8px;
+  position: relative;
+  width: 100%;
+  cursor: text;
+}
+
+.url-card-title:hover {
+  border-color: #c7cfdb;
+  background: #f5f7fa;
+}
+
+.url-card-title::after {
+  content: attr(data-hint);
+  position: absolute;
+  right: 8px;
+  top: 6px;
+  font-size: 0.7rem;
+  color: var(--muted);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.url-card-title:hover::after {
+  opacity: 1;
+}
+
+.url-label-line {
+  display: block;
+  font-weight: 700;
+  font-size: 1rem;
+  line-height: 1.15;
+  word-break: break-word;
+}
+
+.url-title-url {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.69rem;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  line-height: 1.2;
+  word-break: break-all;
+}
+
+.url-card-title.no-label .url-title-url {
+  display: none;
+}
+
+.url-label-input {
+  display: none;
+  border-radius: 8px;
+  border: 1px solid #b9c4d4;
+  padding: 7px 9px;
+  font-size: 0.92rem;
+  width: 100%;
+}
+
+.url-card.is-editing-label .url-card-title {
+  display: none;
+}
+
+.url-card.is-editing-label .url-label-input {
+  display: block;
+}
+
 .url-card-meta {
   margin: 4px 0 0;
   font-size: 0.83rem;
@@ -198,7 +277,7 @@ button:disabled {
 .tile-label {
   margin: 0;
   font-size: 0.78rem;
-  color: var(--muted);
+  color: #111827;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -214,7 +293,7 @@ button:disabled {
 .tile-meta {
   margin: 4px 0 0;
   font-size: 0.77rem;
-  color: var(--muted);
+  color: #111827;
   font-family: var(--font-mono);
 }
 
@@ -252,6 +331,7 @@ button:disabled {
   text-align: center;
   line-height: 1.1;
   font-family: var(--font-mono);
+  color: #111827;
 }
 
 .metric-cell-no-bg {
@@ -275,13 +355,13 @@ button:disabled {
 .metric-points-small {
   font-weight: 500;
   font-size: 0.71rem;
-  color: #4b5563;
+  color: #111827;
 }
 
 .metric-raw-value {
   font-weight: 500;
   font-size: 0.72rem;
-  color: #4b5563;
+  color: #111827;
   margin-top: 1px;
 }
 
@@ -308,6 +388,7 @@ button:disabled {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.88rem;
+  table-layout: fixed;
 }
 
 .score-history-table th,
@@ -405,11 +486,39 @@ th.sortable.sort-desc::after {
   text-align: center;
   vertical-align: middle;
   font-family: var(--font-mono);
+  color: #111827;
 }
 
 .comparison-score-cell {
   font-weight: 800;
   font-size: 0.95rem;
+}
+
+.comparison-url-cell {
+  white-space: normal;
+  min-width: 210px;
+}
+
+.comparison-url-small {
+  display: block;
+  font-size: 0.68rem;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  line-height: 1.2;
+  word-break: break-all;
+}
+
+.comparison-url-label {
+  display: block;
+  margin-top: 2px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.comparison-url-only {
+  font-size: 0.78rem;
+  font-family: var(--font-mono);
+  word-break: break-all;
 }
 
 @media (max-width: 720px) {

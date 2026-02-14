@@ -190,6 +190,7 @@ function syncConfigFromInputs() {
 function createTracker(url) {
   return {
     url,
+    label: "",
     running: false,
     inFlight: false,
     timerId: null,
@@ -932,6 +933,9 @@ function renderCards(renderContext) {
     card.dataset.url = tracker.url;
 
     const title = card.querySelector(".url-card-title");
+    const labelLine = card.querySelector(".url-label-line");
+    const urlLine = card.querySelector(".url-title-url");
+    const labelInput = card.querySelector(".url-label-input");
     const meta = card.querySelector(".url-card-meta");
     const toggleButton = card.querySelector(".toggle-run");
     const runNowButton = card.querySelector(".run-now");
@@ -943,7 +947,48 @@ function renderCards(renderContext) {
     const desktopTile = card.querySelector(".summary-tile[data-mode='desktop']");
     const errorText = card.querySelector(".error-text");
 
-    title.textContent = tracker.url;
+    const hasLabel = Boolean(tracker.label && tracker.label.trim());
+    labelLine.textContent = hasLabel ? tracker.label : tracker.url;
+    urlLine.textContent = tracker.url;
+    title.classList.toggle("no-label", !hasLabel);
+    title.dataset.hint = hasLabel ? "Edit label" : "Add a label";
+
+    title.addEventListener("click", () => {
+      card.classList.add("is-editing-label");
+      labelInput.value = tracker.label || "";
+      labelInput.focus();
+      labelInput.select();
+    });
+
+    let didCancelLabelEdit = false;
+    const commitLabel = () => {
+      if (didCancelLabelEdit) {
+        return;
+      }
+      tracker.label = labelInput.value.trim();
+      persistState();
+      render();
+    };
+    const cancelLabel = () => {
+      didCancelLabelEdit = true;
+      card.classList.remove("is-editing-label");
+      render();
+    };
+
+    labelInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        commitLabel();
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        cancelLabel();
+      }
+    });
+    labelInput.addEventListener("blur", () => {
+      commitLabel();
+    });
 
     meta.textContent = `Status: ${describeTrackerStatus(tracker)}`;
 
@@ -1004,6 +1049,7 @@ function renderComparisonTable(renderContext) {
       rowsData.push({
         id: `${tracker.url}|${mode}`,
         url: tracker.url,
+        label: tracker.label || "",
         mode,
         summary: renderContext.summariesByUrl.get(tracker.url)?.[mode] || null,
         sortValues: {
@@ -1040,7 +1086,19 @@ function renderComparisonTable(renderContext) {
     const row = document.createElement("tr");
 
     const urlCell = document.createElement("td");
-    urlCell.textContent = rowData.url;
+    urlCell.className = "comparison-url-cell";
+    if (rowData.label) {
+      const urlSmall = document.createElement("span");
+      urlSmall.className = "comparison-url-small";
+      urlSmall.textContent = rowData.url;
+      const labelBig = document.createElement("span");
+      labelBig.className = "comparison-url-label";
+      labelBig.textContent = rowData.label;
+      urlCell.append(urlSmall, labelBig);
+    } else {
+      urlCell.classList.add("comparison-url-only");
+      urlCell.textContent = rowData.url;
+    }
     row.append(urlCell);
 
     const modeCell = document.createElement("td");
@@ -1116,6 +1174,7 @@ setInterval(() => {
 function serializeTracker(tracker) {
   return {
     url: tracker.url,
+    label: tracker.label || "",
     running: tracker.running,
     history: tracker.history,
     lastError: tracker.lastError,
@@ -1182,6 +1241,7 @@ function hydrateState() {
         }
 
         const tracker = createTracker(url);
+        tracker.label = typeof stored.label === "string" ? stored.label.trim() : "";
         tracker.history = {
           mobile: Array.isArray(stored.history?.mobile) ? stored.history.mobile : [],
           desktop: Array.isArray(stored.history?.desktop) ? stored.history.desktop : [],

@@ -87,8 +87,12 @@
     <template id="url-card-template">
       <article class="url-card">
         <header>
-          <div>
-            <h3 class="url-card-title"></h3>
+          <div class="url-identity">
+            <button class="url-card-title" type="button" data-hint="Add a label">
+              <span class="url-label-line"></span>
+              <span class="url-title-url"></span>
+            </button>
+            <input class="url-label-input" type="text" maxlength="80" placeholder="Add a label" />
             <p class="url-card-meta"></p>
           </div>
           <div class="url-card-actions">
