@@ -975,19 +975,18 @@ function buildRenderContext() {
       for (const sample of samples) {
         if (Number.isFinite(sample.performanceScore)) {
           runScorePopulationByMode[mode].push(sample.performanceScore);
+          scoreSummaryPopulationByMode[mode].push(sample.performanceScore);
+        }
+        for (const metric of METRICS) {
+          const value = sample.metrics?.[metric.key]?.value;
+          if (Number.isFinite(value)) {
+            metricPopulationsByMode[mode][metric.key].push(value);
+          }
         }
       }
 
       if (!summary) {
         continue;
-      }
-
-      scoreSummaryPopulationByMode[mode].push(summary.avgScore);
-      for (const metric of METRICS) {
-        const value = summary.metrics[metric.key]?.avgValue;
-        if (Number.isFinite(value)) {
-          metricPopulationsByMode[mode][metric.key].push(value);
-        }
       }
     }
 
