@@ -1,9 +1,11 @@
 :root {
   --bg: #f2f4f8;
   --panel: #ffffff;
-  --text: #17212f;
-  --muted: #5e6b7b;
+  --text: #1f2937;
+  --muted: #6b7280;
   --border: #d5dce6;
+  --font-sans: "Roboto", "Segoe UI", sans-serif;
+  --font-mono: "Roboto Mono", "SFMono-Regular", Menlo, monospace;
   --accent: #115cce;
   --danger: #ad1e1e;
   --shadow: 0 8px 22px rgba(21, 34, 56, 0.08);
@@ -18,8 +20,8 @@
 
 body {
   margin: 0;
-  font-family: "Avenir Next", "Segoe UI", sans-serif;
-  background: radial-gradient(circle at top right, #f5f9ff 0, var(--bg) 45%);
+  font-family: var(--font-sans);
+  background: radial-gradient(circle at top right, #f8fafc 0, var(--bg) 45%);
   color: var(--text);
 }
 
@@ -94,9 +96,9 @@ button {
 }
 
 button.secondary {
-  background: #eef3fb;
-  color: #15396f;
-  border-color: #d6e1f2;
+  background: #eceff3;
+  color: #4b5563;
+  border-color: #d1d5db;
 }
 
 button.danger {
@@ -134,14 +136,21 @@ button:disabled {
   border-radius: 10px;
   padding: 12px;
   background: #fcfdff;
+  overflow: hidden;
 }
 
 .url-card > header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: flex-start;
   gap: 10px;
   margin-bottom: 10px;
+}
+
+.url-card > header > div:first-child {
+  flex: 1 1 220px;
+  min-width: 0;
 }
 
 .url-card-title {
@@ -170,14 +179,13 @@ button:disabled {
 
 .details-section {
   display: grid;
-  grid-template-columns: 245px 1fr;
   gap: 8px;
   align-items: start;
 }
 
 .summary-strip {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -190,7 +198,7 @@ button:disabled {
 .tile-label {
   margin: 0;
   font-size: 0.78rem;
-  color: #334c6a;
+  color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -200,28 +208,32 @@ button:disabled {
   font-size: 1.7rem;
   font-weight: 800;
   line-height: 1;
+  font-family: var(--font-mono);
 }
 
 .tile-meta {
   margin: 4px 0 0;
   font-size: 0.77rem;
-  color: #324962;
+  color: var(--muted);
+  font-family: var(--font-mono);
 }
 
 .metric-summary-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.84rem;
+  table-layout: fixed;
 }
 
 .metric-summary-table th,
 .metric-summary-table td {
   border-bottom: 1px solid #d8dee8;
   padding: 5px 6px;
+  white-space: normal;
 }
 
 .metric-summary-table th {
-  background: #f2f5f9;
+  background: #eef0f3;
   text-align: left;
 }
 
@@ -239,6 +251,7 @@ button:disabled {
   padding: 3px 6px;
   text-align: center;
   line-height: 1.1;
+  font-family: var(--font-mono);
 }
 
 .metric-cell-no-bg {
@@ -262,13 +275,13 @@ button:disabled {
 .metric-points-small {
   font-weight: 500;
   font-size: 0.71rem;
-  color: #31455f;
+  color: #4b5563;
 }
 
 .metric-raw-value {
   font-weight: 500;
   font-size: 0.72rem;
-  color: #31455f;
+  color: #4b5563;
   margin-top: 1px;
 }
 
@@ -302,6 +315,7 @@ button:disabled {
   border: 1px solid #c4c8ce;
   text-align: center;
   padding: 4px 6px;
+  white-space: normal;
 }
 
 .score-history-table th {
@@ -318,18 +332,21 @@ button:disabled {
 }
 
 .score-history-run {
-  color: #5e6b7b;
+  color: var(--muted);
   font-size: 0.8rem;
+  font-family: var(--font-mono);
 }
 
 .score-cell-mobile,
 .score-cell-desktop {
   font-weight: 700;
   font-size: 1.03rem;
+  font-family: var(--font-mono);
 }
 
 .score-cell-empty {
   color: #8793a3;
+  font-family: var(--font-mono);
 }
 
 .table-wrap {
@@ -351,8 +368,8 @@ td {
 }
 
 th {
-  background: #f5f7fc;
-  color: #2a3f64;
+  background: #eef0f3;
+  color: #4b5563;
   position: sticky;
   top: 0;
 }
@@ -364,18 +381,18 @@ th.sortable {
 
 th.sortable::after {
   content: " \21C5";
-  color: #8ea3c3;
+  color: #9ca3af;
   font-size: 0.82rem;
 }
 
 th.sortable.sort-asc::after {
   content: " \2191";
-  color: #3a5d93;
+  color: #6b7280;
 }
 
 th.sortable.sort-desc::after {
   content: " \2193";
-  color: #3a5d93;
+  color: #6b7280;
 }
 
 .placeholder {
@@ -387,6 +404,7 @@ th.sortable.sort-desc::after {
 .comparison-color-cell {
   text-align: center;
   vertical-align: middle;
+  font-family: var(--font-mono);
 }
 
 .comparison-score-cell {
@@ -412,6 +430,10 @@ th.sortable.sort-desc::after {
   }
 
   .details-section {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-strip {
     grid-template-columns: 1fr;
   }
 }
