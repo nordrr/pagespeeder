@@ -1,5 +1,6 @@
 const PSI_ENDPOINT = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed";
 const STRATEGIES = ["mobile", "desktop"];
+const STORAGE_KEY = "pagespeed-tracker-state-v1";
 
 const METRICS = [
   {
@@ -72,6 +73,7 @@ setupForm.addEventListener("submit", (event) => {
   const tracker = createTracker(cleanedUrl);
   state.trackers.set(cleanedUrl, tracker);
   startTracker(tracker, true);
+  persistState();
 
   urlInput.value = "";
   render();
@@ -86,6 +88,7 @@ startAllButton.addEventListener("click", () => {
     startTracker(tracker);
   }
 
+  persistState();
   render();
 });
 
@@ -94,6 +97,7 @@ stopAllButton.addEventListener("click", () => {
     stopTracker(tracker);
   }
 
+  persistState();
   render();
 });
 
@@ -107,6 +111,7 @@ clearAllButton.addEventListener("click", () => {
   }
 
   state.trackers.clear();
+  persistState();
   render();
 });
 
@@ -136,6 +141,7 @@ function syncConfigFromInputs() {
     }
   }
 
+  persistState();
   return true;
 }
 
@@ -151,12 +157,18 @@ function createTracker(url) {
       desktop: [],
     },
     lastError: "",
+    phase: "paused",
+    activeStrategy: null,
+    cooldownUntil: null,
   };
 }
 
 function startTracker(tracker, runImmediately = false) {
   tracker.running = true;
   tracker.lastError = "";
+  tracker.phase = "queued";
+  tracker.activeStrategy = null;
+  tracker.cooldownUntil = null;
   if (tracker.timerId) {
     clearTimeout(tracker.timerId);
     tracker.timerId = null;
@@ -170,11 +182,16 @@ function startTracker(tracker, runImmediately = false) {
   if (!tracker.timerId && !tracker.inFlight) {
     scheduleNext(tracker, 0);
   }
+
+  persistState();
 }
 
 function stopTracker(tracker) {
   tracker.running = false;
   tracker.lastError = "";
+  tracker.phase = "paused";
+  tracker.activeStrategy = null;
+  tracker.cooldownUntil = null;
 
   if (tracker.timerId) {
     clearTimeout(tracker.timerId);
@@ -182,6 +199,7 @@ function stopTracker(tracker) {
   }
 
   tracker.nextRunAt = null;
+  persistState();
 }
 
 function removeTracker(url) {
@@ -192,6 +210,7 @@ function removeTracker(url) {
 
   stopTracker(tracker);
   state.trackers.delete(url);
+  persistState();
   render();
 }
 
@@ -201,10 +220,14 @@ function scheduleNext(tracker, delayMs) {
   }
 
   tracker.nextRunAt = Date.now() + delayMs;
+  tracker.phase = "waiting";
+  tracker.activeStrategy = null;
+  tracker.cooldownUntil = null;
   tracker.timerId = setTimeout(() => {
     tracker.timerId = null;
     runCycle(tracker);
   }, delayMs);
+  persistState();
 }
 
 async function runCycle(tracker) {
@@ -215,33 +238,57 @@ async function runCycle(tracker) {
   if (!state.apiKey) {
     tracker.lastError = "Missing API key.";
     tracker.running = false;
+    tracker.phase = "paused";
+    tracker.activeStrategy = null;
     render();
+    persistState();
     return;
   }
 
   tracker.inFlight = true;
   tracker.lastError = "";
+  tracker.phase = "running";
+  tracker.activeStrategy = null;
+  tracker.cooldownUntil = null;
   render();
+  persistState();
 
   for (const strategy of STRATEGIES) {
+    tracker.phase = "awaiting-google";
+    tracker.activeStrategy = strategy;
+    tracker.cooldownUntil = null;
+    render();
+    persistState();
+
     try {
       const sample = await fetchPsiSample(tracker.url, strategy, state.apiKey);
       tracker.history[strategy].push(sample);
       tracker.lastError = "";
+      persistState();
     } catch (error) {
       tracker.lastError = `${strategy}: ${error.message}`;
+      persistState();
     }
 
+    tracker.phase = "cooldown";
+    tracker.cooldownUntil = Date.now() + 1200;
+    tracker.activeStrategy = strategy;
+    render();
+    persistState();
     await wait(1200);
   }
 
   tracker.inFlight = false;
+  tracker.phase = "waiting";
+  tracker.activeStrategy = null;
+  tracker.cooldownUntil = null;
 
   if (tracker.running) {
     scheduleNext(tracker, state.pollIntervalSec * 1000);
   }
 
   render();
+  persistState();
 }
 
 async function fetchPsiSample(url, strategy, apiKey) {
@@ -397,6 +444,34 @@ function formatCountdown(timestamp) {
   return `${secondsLeft}s`;
 }
 
+function describeTrackerStatus(tracker) {
+  if (!tracker.running) {
+    return "Paused";
+  }
+
+  if (tracker.phase === "awaiting-google") {
+    return `Waiting for Google PageSpeed result (${tracker.activeStrategy})`;
+  }
+
+  if (tracker.phase === "cooldown") {
+    return `Cooldown between requests: ${formatCountdown(tracker.cooldownUntil)}`;
+  }
+
+  if (tracker.phase === "running") {
+    return "Cycle started";
+  }
+
+  if (tracker.phase === "queued") {
+    return "Queued to run";
+  }
+
+  if (tracker.nextRunAt) {
+    return `Waiting for next run: ${formatCountdown(tracker.nextRunAt)}`;
+  }
+
+  return "Waiting";
+}
+
 function percentileRank(values, value) {
   if (!values.length) {
     return 0;
@@ -447,8 +522,7 @@ function renderCards() {
 
     title.textContent = tracker.url;
 
-    const status = tracker.inFlight ? "Running now" : tracker.running ? "Active" : "Paused";
-    meta.textContent = `${status} • Next cycle: ${formatCountdown(tracker.nextRunAt)}`;
+    meta.textContent = `Status: ${describeTrackerStatus(tracker)}`;
 
     toggleButton.textContent = tracker.running ? "Pause" : "Resume";
     toggleButton.addEventListener("click", () => {
@@ -588,5 +662,89 @@ function renderComparisonTable() {
 setInterval(() => {
   render();
 }, 1000);
+
+function serializeTracker(tracker) {
+  return {
+    url: tracker.url,
+    running: tracker.running,
+    history: tracker.history,
+    lastError: tracker.lastError,
+    phase: tracker.phase,
+    activeStrategy: tracker.activeStrategy,
+    cooldownUntil: tracker.cooldownUntil,
+  };
+}
+
+function persistState() {
+  try {
+    const payload = {
+      apiKey: state.apiKey,
+      pollIntervalSec: state.pollIntervalSec,
+      trackers: Array.from(state.trackers.values()).map(serializeTracker),
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  } catch (error) {
+    console.warn("Failed to persist state", error);
+  }
+}
+
+function hydrateState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return;
+    }
+    const parsed = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null) {
+      return;
+    }
+
+    if (typeof parsed.apiKey === "string") {
+      state.apiKey = parsed.apiKey;
+      apiKeyInput.value = parsed.apiKey;
+    }
+
+    if (Number.isFinite(parsed.pollIntervalSec) && parsed.pollIntervalSec >= 60) {
+      state.pollIntervalSec = parsed.pollIntervalSec;
+      pollIntervalInput.value = String(parsed.pollIntervalSec);
+    }
+
+    if (Array.isArray(parsed.trackers)) {
+      for (const stored of parsed.trackers) {
+        if (!stored || typeof stored.url !== "string") {
+          continue;
+        }
+        const url = normalizeUrl(stored.url);
+        if (!url || state.trackers.has(url)) {
+          continue;
+        }
+
+        const tracker = createTracker(url);
+        tracker.history = {
+          mobile: Array.isArray(stored.history?.mobile) ? stored.history.mobile : [],
+          desktop: Array.isArray(stored.history?.desktop) ? stored.history.desktop : [],
+        };
+        tracker.lastError = typeof stored.lastError === "string" ? stored.lastError : "";
+        tracker.running = stored.running === true;
+        tracker.phase = typeof stored.phase === "string" ? stored.phase : (tracker.running ? "queued" : "paused");
+        tracker.activeStrategy =
+          typeof stored.activeStrategy === "string" ? stored.activeStrategy : null;
+        tracker.cooldownUntil =
+          Number.isFinite(stored.cooldownUntil) ? stored.cooldownUntil : null;
+
+        state.trackers.set(url, tracker);
+      }
+    }
+  } catch (error) {
+    console.warn("Failed to load saved state", error);
+  }
+}
+
+hydrateState();
+for (const tracker of state.trackers.values()) {
+  if (tracker.running) {
+    startTracker(tracker);
+  }
+}
 
 render();
