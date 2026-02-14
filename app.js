@@ -561,11 +561,11 @@ function formatPointValue(value) {
 function formatContributionText(strategy, metricKey, value) {
   const contribution = metricContribution(strategy, metricKey, value);
   if (!contribution) {
-    return { points: "--", outOf: "/-- pts" };
+    return { points: "--", outOf: "/--" };
   }
   return {
     points: formatPointValue(contribution.points),
-    outOf: `/${formatPointValue(contribution.maxPoints)} pts`,
+    outOf: `/${formatPointValue(contribution.maxPoints)}`,
   };
 }
 
