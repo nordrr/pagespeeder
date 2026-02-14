@@ -915,7 +915,7 @@ function renderSummaryTile(tile, summary, renderContext) {
 
   const percentile = getPercentile(renderContext.scoreSummaryPopulation, summary.avgScore, true);
   scoreNode.textContent = summary.avgScore.toFixed(1);
-  metaNode.textContent = `${formatConfidence(summary.ci95HalfWidth)} • ${summary.samples} runs • ${formatTimestamp(summary.latestTimestamp)}`;
+  metaNode.textContent = `${formatConfidence(summary.ci95HalfWidth)} (${summary.samples} runs)`;
   tile.style.backgroundColor = percentileColor(percentile);
   tile.style.borderColor = "#b8c6d9";
 }

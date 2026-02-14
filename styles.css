@@ -53,8 +53,7 @@ main {
   display: grid;
   gap: 16px;
   padding: 18px;
-  max-width: 1300px;
-  margin: 0 auto;
+  margin: 0;
 }
 
 .panel {
@@ -132,7 +131,8 @@ button:disabled {
   margin-top: 12px;
   display: grid;
   gap: 14px;
-  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(340px, 450px));
+  justify-content: start;
 }
 
 .url-card {
@@ -141,6 +141,8 @@ button:disabled {
   padding: 12px;
   background: #fcfdff;
   overflow: hidden;
+  width: 100%;
+  max-width: 450px;
 }
 
 .url-card > header {
@@ -304,7 +306,7 @@ button:disabled {
   margin: 4px 0 0;
   font-size: 0.77rem;
   color: #111827;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
 }
 
 .metric-summary-table {
