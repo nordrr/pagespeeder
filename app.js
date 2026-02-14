@@ -951,12 +951,17 @@ function sortRows(rowsData) {
 
 function buildRenderContext() {
   const summariesByUrl = new Map();
-  const scoreSummaryPopulation = [];
-  const runScorePopulation = [];
-  const metricPopulations = {};
+  const scoreSummaryPopulationByMode = {};
+  const runScorePopulationByMode = {};
+  const metricPopulationsByMode = {};
 
-  for (const metric of METRICS) {
-    metricPopulations[metric.key] = [];
+  for (const mode of STRATEGIES) {
+    scoreSummaryPopulationByMode[mode] = [];
+    runScorePopulationByMode[mode] = [];
+    metricPopulationsByMode[mode] = {};
+    for (const metric of METRICS) {
+      metricPopulationsByMode[mode][metric.key] = [];
+    }
   }
 
   for (const tracker of state.trackers.values()) {
@@ -969,7 +974,7 @@ function buildRenderContext() {
 
       for (const sample of samples) {
         if (Number.isFinite(sample.performanceScore)) {
-          runScorePopulation.push(sample.performanceScore);
+          runScorePopulationByMode[mode].push(sample.performanceScore);
         }
       }
 
@@ -977,11 +982,11 @@ function buildRenderContext() {
         continue;
       }
 
-      scoreSummaryPopulation.push(summary.avgScore);
+      scoreSummaryPopulationByMode[mode].push(summary.avgScore);
       for (const metric of METRICS) {
         const value = summary.metrics[metric.key]?.avgValue;
         if (Number.isFinite(value)) {
-          metricPopulations[metric.key].push(value);
+          metricPopulationsByMode[mode][metric.key].push(value);
         }
       }
     }
@@ -991,9 +996,9 @@ function buildRenderContext() {
 
   return {
     summariesByUrl,
-    scoreSummaryPopulation,
-    runScorePopulation,
-    metricPopulations,
+    scoreSummaryPopulationByMode,
+    runScorePopulationByMode,
+    metricPopulationsByMode,
   };
 }
 
@@ -1106,7 +1111,7 @@ function renderScoreCell(cell, sample, mode, renderContext, tracker, rowData) {
   }
 
   const score = sample.performanceScore;
-  const percentile = getPercentile(renderContext.runScorePopulation, score, true);
+  const percentile = getPercentile(renderContext.runScorePopulationByMode[mode], score, true);
   const background = percentileColor(percentile);
   cell.className = mode === "mobile" ? "score-cell-mobile" : "score-cell-desktop";
   cell.style.backgroundColor = background;
@@ -1157,7 +1162,7 @@ function renderScoreHistory(tbody, tracker, renderContext) {
   }
 }
 
-function renderSummaryTile(tile, summary, renderContext) {
+function renderSummaryTile(tile, summary, mode, renderContext) {
   const scoreNode = tile.querySelector(".tile-score");
   const metaNode = tile.querySelector(".tile-meta");
   tile.style.backgroundColor = "";
@@ -1176,7 +1181,7 @@ function renderSummaryTile(tile, summary, renderContext) {
     return;
   }
 
-  const percentile = getPercentile(renderContext.scoreSummaryPopulation, summary.avgScore, true);
+  const percentile = getPercentile(renderContext.scoreSummaryPopulationByMode[mode], summary.avgScore, true);
   scoreNode.textContent = summary.avgScore.toFixed(1);
   const requiredRuns = summary.samples < 2
     ? null
@@ -1219,7 +1224,7 @@ function renderMetricSummary(tbody, mobileSummary, desktopSummary, renderContext
       mobileCell.textContent = "--";
     } else {
       const percentile = getPercentile(
-        renderContext.metricPopulations[metric.key],
+        renderContext.metricPopulationsByMode.mobile[metric.key],
         mobileMetric.avgValue,
         metric.higherIsBetter,
       );
@@ -1242,7 +1247,7 @@ function renderMetricSummary(tbody, mobileSummary, desktopSummary, renderContext
       desktopCell.textContent = "--";
     } else {
       const percentile = getPercentile(
-        renderContext.metricPopulations[metric.key],
+        renderContext.metricPopulationsByMode.desktop[metric.key],
         desktopMetric.avgValue,
         metric.higherIsBetter,
       );
@@ -1543,8 +1548,8 @@ function renderCards(renderContext) {
     const summaries = renderContext.summariesByUrl.get(tracker.url) || {};
     const mobileSummary = summaries.mobile || null;
     const desktopSummary = summaries.desktop || null;
-    renderSummaryTile(mobileTile, mobileSummary, renderContext);
-    renderSummaryTile(desktopTile, desktopSummary, renderContext);
+    renderSummaryTile(mobileTile, mobileSummary, "mobile", renderContext);
+    renderSummaryTile(desktopTile, desktopSummary, "desktop", renderContext);
     renderMetricSummary(metricSummaryBody, mobileSummary, desktopSummary, renderContext);
     renderScoreHistory(scoreHistoryBody, tracker, renderContext);
     errorText.textContent = tracker.lastError;
@@ -1643,7 +1648,11 @@ function renderComparisonTable(renderContext) {
       continue;
     }
 
-    const scorePercentile = getPercentile(renderContext.scoreSummaryPopulation, rowData.summary.avgScore, true);
+    const scorePercentile = getPercentile(
+      renderContext.scoreSummaryPopulationByMode[rowData.mode],
+      rowData.summary.avgScore,
+      true,
+    );
     const scoreAvgCell = document.createElement("td");
     scoreAvgCell.className = "comparison-color-cell comparison-score-cell";
     scoreAvgCell.style.backgroundColor = percentileColor(scorePercentile);
@@ -1663,7 +1672,7 @@ function renderComparisonTable(renderContext) {
       metricCell.className = "comparison-color-cell";
       const metricResult = rowData.summary.metrics[metric.key];
       const percentile = getPercentile(
-        renderContext.metricPopulations[metric.key],
+        renderContext.metricPopulationsByMode[rowData.mode][metric.key],
         metricResult.avgValue,
         metric.higherIsBetter,
       );
