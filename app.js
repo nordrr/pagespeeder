@@ -7,30 +7,35 @@ const METRICS = [
     key: "fcp",
     auditId: "first-contentful-paint",
     label: "FCP",
+    higherIsBetter: false,
     format: (value) => `${(value / 1000).toFixed(2)}s`,
   },
   {
     key: "si",
     auditId: "speed-index",
     label: "SI",
+    higherIsBetter: false,
     format: (value) => `${(value / 1000).toFixed(2)}s`,
   },
   {
     key: "lcp",
     auditId: "largest-contentful-paint",
     label: "LCP",
+    higherIsBetter: false,
     format: (value) => `${(value / 1000).toFixed(2)}s`,
   },
   {
     key: "tbt",
     auditId: "total-blocking-time",
     label: "TBT",
+    higherIsBetter: false,
     format: (value) => `${Math.round(value)}ms`,
   },
   {
     key: "cls",
     auditId: "cumulative-layout-shift",
     label: "CLS",
+    higherIsBetter: false,
     format: (value) => value.toFixed(3),
   },
 ];
@@ -424,18 +429,50 @@ function wait(ms) {
   });
 }
 
-function scoreColor(score) {
-  const bounded = Math.max(0, Math.min(100, score));
-  const hue = Math.round((bounded / 100) * 120);
-  return `hsl(${hue} 65% 80%)`;
+function mixColor(from, to, ratio) {
+  const t = Math.max(0, Math.min(1, ratio));
+  const red = Math.round(from[0] + (to[0] - from[0]) * t);
+  const green = Math.round(from[1] + (to[1] - from[1]) * t);
+  const blue = Math.round(from[2] + (to[2] - from[2]) * t);
+  return `rgb(${red} ${green} ${blue})`;
+}
+
+function percentileColor(percentile) {
+  if (!Number.isFinite(percentile)) {
+    return "";
+  }
+
+  const low = [223, 122, 114];
+  const mid = [232, 226, 222];
+  const high = [99, 188, 147];
+  const p = Math.max(0, Math.min(100, percentile));
+
+  if (p <= 50) {
+    return mixColor(low, mid, p / 50);
+  }
+  return mixColor(mid, high, (p - 50) / 50);
+}
+
+function getPercentile(population, value, higherIsBetter = true) {
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+  if (!Array.isArray(population) || population.length === 0) {
+    return 50;
+  }
+
+  const raw = percentileRank(population, value);
+  return higherIsBetter ? raw : 100 - raw;
 }
 
 function scoreCell(text, percentile) {
   const span = document.createElement("span");
   span.className = "cell-colored";
-  span.style.backgroundColor = scoreColor(percentile);
+  span.style.backgroundColor = percentileColor(percentile);
   span.textContent = text;
-  span.title = `Percentile: ${Math.round(percentile)}`;
+  if (Number.isFinite(percentile)) {
+    span.title = `Percentile: ${Math.round(percentile)}`;
+  }
   return span;
 }
 
@@ -576,71 +613,208 @@ function sortRows(rowsData) {
   return sorted;
 }
 
-function buildRunEntries(tracker) {
-  const entries = [];
-  for (const mode of STRATEGIES) {
-    for (const sample of tracker.history[mode]) {
-      entries.push({
-        mode,
-        sample,
-      });
-    }
+function buildRenderContext() {
+  const summariesByUrl = new Map();
+  const scoreSummaryPopulation = [];
+  const runScorePopulation = [];
+  const metricPopulations = {};
+
+  for (const metric of METRICS) {
+    metricPopulations[metric.key] = [];
   }
-  entries.sort((a, b) => b.sample.timestamp - a.sample.timestamp);
-  return entries.slice(0, 200);
+
+  for (const tracker of state.trackers.values()) {
+    const modeSummaries = {};
+
+    for (const mode of STRATEGIES) {
+      const samples = tracker.history[mode];
+      const summary = summarize(samples);
+      modeSummaries[mode] = summary;
+
+      for (const sample of samples) {
+        if (Number.isFinite(sample.performanceScore)) {
+          runScorePopulation.push(sample.performanceScore);
+        }
+      }
+
+      if (!summary) {
+        continue;
+      }
+
+      scoreSummaryPopulation.push(summary.avgScore);
+      for (const metric of METRICS) {
+        const value = summary.metrics[metric.key]?.avgValue;
+        if (Number.isFinite(value)) {
+          metricPopulations[metric.key].push(value);
+        }
+      }
+    }
+
+    summariesByUrl.set(tracker.url, modeSummaries);
+  }
+
+  return {
+    summariesByUrl,
+    scoreSummaryPopulation,
+    runScorePopulation,
+    metricPopulations,
+  };
 }
 
-function renderRunLog(container, tracker) {
-  container.innerHTML = "";
-  const entries = buildRunEntries(tracker);
+function buildScoreRows(tracker, limit = 200) {
+  const mobileSamples = tracker.history.mobile;
+  const desktopSamples = tracker.history.desktop;
+  const total = Math.max(mobileSamples.length, desktopSamples.length);
+  const rows = [];
 
-  if (!entries.length) {
-    const empty = document.createElement("p");
-    empty.className = "run-log-empty";
-    empty.textContent = "No runs yet.";
-    container.append(empty);
+  for (let index = total - 1; index >= 0 && rows.length < limit; index -= 1) {
+    const mobile = mobileSamples[index] || null;
+    const desktop = desktopSamples[index] || null;
+    const timestamp = Math.max(mobile?.timestamp || 0, desktop?.timestamp || 0);
+    rows.push({
+      runNumber: index + 1,
+      timestamp,
+      mobile,
+      desktop,
+    });
+  }
+
+  return rows;
+}
+
+function renderScoreCell(cell, sample, mode, renderContext) {
+  if (!sample) {
+    cell.className = "score-cell-empty";
+    cell.style.backgroundColor = "";
+    cell.textContent = "--";
     return;
   }
 
-  for (const entry of entries) {
-    const wrapper = document.createElement("article");
-    wrapper.className = "run-entry";
+  const score = sample.performanceScore;
+  const percentile = getPercentile(renderContext.runScorePopulation, score, true);
+  cell.className = mode === "mobile" ? "score-cell-mobile" : "score-cell-desktop";
+  cell.style.backgroundColor = percentileColor(percentile);
+  cell.textContent = score.toFixed(0);
+}
 
-    const header = document.createElement("div");
-    header.className = "run-entry-header";
+function renderScoreHistory(tbody, tracker, renderContext) {
+  tbody.innerHTML = "";
+  const rows = buildScoreRows(tracker);
+  if (!rows.length) {
+    const row = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = 3;
+    cell.className = "placeholder";
+    cell.textContent = "No runs yet.";
+    row.append(cell);
+    tbody.append(row);
+    return;
+  }
 
-    const left = document.createElement("span");
-    left.className = "run-entry-mode";
-    left.textContent = `${entry.mode} • ${formatTimestamp(entry.sample.timestamp)}`;
+  for (const rowData of rows) {
+    const row = document.createElement("tr");
+    const runCell = document.createElement("td");
+    runCell.className = "score-history-run";
+    runCell.textContent = `#${rowData.runNumber} ${formatTimestamp(rowData.timestamp)}`;
+    row.append(runCell);
 
-    const right = document.createElement("span");
-    right.className = "run-entry-score";
-    right.textContent = `Score ${entry.sample.performanceScore.toFixed(1)}`;
+    const mobileCell = document.createElement("td");
+    renderScoreCell(mobileCell, rowData.mobile, "mobile", renderContext);
+    row.append(mobileCell);
 
-    header.append(left, right);
-    wrapper.append(header);
+    const desktopCell = document.createElement("td");
+    renderScoreCell(desktopCell, rowData.desktop, "desktop", renderContext);
+    row.append(desktopCell);
 
-    const metrics = document.createElement("div");
-    metrics.className = "run-entry-metrics";
-    metrics.textContent = METRICS.map((metric) => {
-      const value = entry.sample.metrics[metric.key]?.value;
-      if (typeof value !== "number") {
-        return `${metric.label}: --`;
-      }
-      return `${metric.label}: ${metric.format(value)}`;
-    }).join(" • ");
+    tbody.append(row);
+  }
+}
 
-    wrapper.append(metrics);
-    container.append(wrapper);
+function renderSummaryTile(tile, summary, renderContext) {
+  const scoreNode = tile.querySelector(".tile-score");
+  const metaNode = tile.querySelector(".tile-meta");
+  tile.style.backgroundColor = "";
+  tile.style.borderColor = "";
+
+  if (!summary) {
+    scoreNode.textContent = "--";
+    metaNode.textContent = "Need runs";
+    return;
+  }
+
+  const percentile = getPercentile(renderContext.scoreSummaryPopulation, summary.avgScore, true);
+  scoreNode.textContent = summary.avgScore.toFixed(1);
+  metaNode.textContent = `${formatConfidence(summary.ci95HalfWidth)} • ${summary.samples} runs • ${formatTimestamp(summary.latestTimestamp)}`;
+  tile.style.backgroundColor = percentileColor(percentile);
+  tile.style.borderColor = "#b8c6d9";
+}
+
+function renderMetricSummary(tbody, mobileSummary, desktopSummary, renderContext) {
+  tbody.innerHTML = "";
+
+  for (const metric of METRICS) {
+    const row = document.createElement("tr");
+    const labelCell = document.createElement("td");
+    labelCell.textContent = metric.label;
+    row.append(labelCell);
+
+    const mobileCell = document.createElement("td");
+    const mobileMetric = mobileSummary?.metrics?.[metric.key];
+    if (!mobileMetric) {
+      mobileCell.textContent = "--";
+    } else {
+      const percentile = getPercentile(
+        renderContext.metricPopulations[metric.key],
+        mobileMetric.avgValue,
+        metric.higherIsBetter,
+      );
+      const mobileValue = document.createElement("span");
+      mobileValue.className = "metric-cell";
+      mobileValue.style.backgroundColor = percentileColor(percentile);
+      mobileValue.textContent = metric.format(mobileMetric.avgValue);
+      mobileCell.append(mobileValue);
+    }
+    row.append(mobileCell);
+
+    const desktopCell = document.createElement("td");
+    const desktopMetric = desktopSummary?.metrics?.[metric.key];
+    if (!desktopMetric) {
+      desktopCell.textContent = "--";
+    } else {
+      const percentile = getPercentile(
+        renderContext.metricPopulations[metric.key],
+        desktopMetric.avgValue,
+        metric.higherIsBetter,
+      );
+      const desktopValue = document.createElement("span");
+      desktopValue.className = "metric-cell";
+      desktopValue.style.backgroundColor = percentileColor(percentile);
+      desktopValue.textContent = metric.format(desktopMetric.avgValue);
+      desktopCell.append(desktopValue);
+    }
+    row.append(desktopCell);
+
+    tbody.append(row);
   }
 }
 
 function render() {
-  renderCards();
-  renderComparisonTable();
+  const renderContext = buildRenderContext();
+  renderCards(renderContext);
+  renderComparisonTable(renderContext);
+  refreshLiveStatusText();
 }
 
-function renderCards() {
+function renderCards(renderContext) {
+  const scrollByUrl = new Map();
+  for (const existingCard of urlCardsContainer.querySelectorAll(".url-card[data-url]")) {
+    const url = existingCard.dataset.url;
+    const scroller = existingCard.querySelector(".score-history-scroll");
+    if (url && scroller) {
+      scrollByUrl.set(url, scroller.scrollTop);
+    }
+  }
+
   urlCardsContainer.innerHTML = "";
 
   if (!state.trackers.size) {
@@ -652,15 +826,20 @@ function renderCards() {
   }
 
   for (const tracker of state.trackers.values()) {
-    const fragment = urlCardTemplate.content.cloneNode(true);
-    const card = fragment.querySelector(".url-card");
-    const title = fragment.querySelector(".url-card-title");
-    const meta = fragment.querySelector(".url-card-meta");
-    const toggleButton = fragment.querySelector(".toggle-run");
-    const runNowButton = fragment.querySelector(".run-now");
-    const removeButton = fragment.querySelector(".remove");
-    const runLog = fragment.querySelector(".run-log");
-    const errorText = fragment.querySelector(".error-text");
+    const card = urlCardTemplate.content.firstElementChild.cloneNode(true);
+    card.dataset.url = tracker.url;
+
+    const title = card.querySelector(".url-card-title");
+    const meta = card.querySelector(".url-card-meta");
+    const toggleButton = card.querySelector(".toggle-run");
+    const runNowButton = card.querySelector(".run-now");
+    const removeButton = card.querySelector(".remove");
+    const scoreHistoryScroll = card.querySelector(".score-history-scroll");
+    const scoreHistoryBody = card.querySelector(".score-history-body");
+    const metricSummaryBody = card.querySelector(".metric-summary-body");
+    const mobileTile = card.querySelector(".summary-tile[data-mode='mobile']");
+    const desktopTile = card.querySelector(".summary-tile[data-mode='desktop']");
+    const errorText = card.querySelector(".error-text");
 
     title.textContent = tracker.url;
 
@@ -686,39 +865,23 @@ function renderCards() {
 
     removeButton.addEventListener("click", () => removeTracker(tracker.url));
 
-    for (const mode of STRATEGIES) {
-      const panel = card.querySelector(`[data-mode='${mode}']`);
-      const scoreNode = panel.querySelector(".score");
-      const confidenceNode = panel.querySelector(".confidence");
-      const samplesNode = panel.querySelector(".samples");
-      const lastRunNode = panel.querySelector(".last-run");
-      const summary = summarize(tracker.history[mode]);
-
-      if (!summary) {
-        scoreNode.textContent = "--";
-        confidenceNode.textContent = "--";
-        samplesNode.textContent = "0";
-        lastRunNode.textContent = "--";
-        continue;
-      }
-
-      scoreNode.textContent = summary.avgScore.toFixed(1);
-      scoreNode.style.backgroundColor = scoreColor(summary.avgScore);
-      scoreNode.style.padding = "2px 8px";
-      scoreNode.style.borderRadius = "6px";
-
-      confidenceNode.textContent = formatConfidence(summary.ci95HalfWidth);
-      samplesNode.textContent = String(summary.samples);
-      lastRunNode.textContent = formatTimestamp(summary.latestTimestamp);
-    }
-
-    renderRunLog(runLog, tracker);
+    const summaries = renderContext.summariesByUrl.get(tracker.url) || {};
+    const mobileSummary = summaries.mobile || null;
+    const desktopSummary = summaries.desktop || null;
+    renderSummaryTile(mobileTile, mobileSummary, renderContext);
+    renderSummaryTile(desktopTile, desktopSummary, renderContext);
+    renderMetricSummary(metricSummaryBody, mobileSummary, desktopSummary, renderContext);
+    renderScoreHistory(scoreHistoryBody, tracker, renderContext);
     errorText.textContent = tracker.lastError;
-    urlCardsContainer.append(fragment);
+
+    urlCardsContainer.append(card);
+    if (scoreHistoryScroll && scrollByUrl.has(tracker.url)) {
+      scoreHistoryScroll.scrollTop = scrollByUrl.get(tracker.url);
+    }
   }
 }
 
-function renderComparisonTable() {
+function renderComparisonTable(renderContext) {
   updateSortHeaderIndicators();
   comparisonBody.innerHTML = "";
 
@@ -740,7 +903,7 @@ function renderComparisonTable() {
         id: `${tracker.url}|${mode}`,
         url: tracker.url,
         mode,
-        summary: summarize(tracker.history[mode]),
+        summary: renderContext.summariesByUrl.get(tracker.url)?.[mode] || null,
         sortValues: {
           url: tracker.url.toLowerCase(),
           mode,
@@ -771,17 +934,6 @@ function renderComparisonTable() {
 
   const sortedRows = sortRows(rowsData);
 
-  const scorePopulation = rowsData
-    .filter((rowData) => rowData.summary)
-    .map((rowData) => rowData.summary.avgScore);
-
-  const metricPopulations = {};
-  for (const metric of METRICS) {
-    metricPopulations[metric.key] = rowsData
-      .filter((rowData) => rowData.summary)
-      .map((rowData) => rowData.summary.metrics[metric.key].avgScore);
-  }
-
   for (const rowData of sortedRows) {
     const row = document.createElement("tr");
 
@@ -803,7 +955,7 @@ function renderComparisonTable() {
       continue;
     }
 
-    const scorePercentile = percentileRank(scorePopulation, rowData.summary.avgScore);
+    const scorePercentile = getPercentile(renderContext.scoreSummaryPopulation, rowData.summary.avgScore, true);
     const scoreAvgCell = document.createElement("td");
     scoreAvgCell.append(scoreCell(rowData.summary.avgScore.toFixed(1), scorePercentile));
     row.append(scoreAvgCell);
@@ -819,7 +971,11 @@ function renderComparisonTable() {
     for (const metric of METRICS) {
       const metricCell = document.createElement("td");
       const metricResult = rowData.summary.metrics[metric.key];
-      const percentile = percentileRank(metricPopulations[metric.key], metricResult.avgScore);
+      const percentile = getPercentile(
+        renderContext.metricPopulations[metric.key],
+        metricResult.avgValue,
+        metric.higherIsBetter,
+      );
       const bubble = scoreCell(metric.format(metricResult.avgValue), percentile);
       metricCell.append(bubble);
       row.append(metricCell);
@@ -829,8 +985,20 @@ function renderComparisonTable() {
   }
 }
 
+function refreshLiveStatusText() {
+  for (const card of urlCardsContainer.querySelectorAll(".url-card[data-url]")) {
+    const url = card.dataset.url;
+    const tracker = state.trackers.get(url);
+    const meta = card.querySelector(".url-card-meta");
+    if (!tracker || !meta) {
+      continue;
+    }
+    meta.textContent = `Status: ${describeTrackerStatus(tracker)}`;
+  }
+}
+
 setInterval(() => {
-  render();
+  refreshLiveStatusText();
 }, 1000);
 
 function serializeTracker(tracker) {

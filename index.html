@@ -91,30 +91,47 @@
             <button class="remove danger" type="button">Remove</button>
           </div>
         </header>
-        <div class="mode-grid">
-          <section class="mode-panel" data-mode="mobile">
-            <h4>Mobile</h4>
-            <dl>
-              <div><dt>Average score</dt><dd class="score">--</dd></div>
-              <div><dt>95% confidence</dt><dd class="confidence">--</dd></div>
-              <div><dt>Samples</dt><dd class="samples">0</dd></div>
-              <div><dt>Last run</dt><dd class="last-run">--</dd></div>
-            </dl>
+        <div class="url-card-content">
+          <section class="details-section">
+            <div class="summary-strip">
+              <article class="summary-tile mobile" data-mode="mobile">
+                <p class="tile-label">Mobile Avg</p>
+                <p class="tile-score">--</p>
+                <p class="tile-meta">±-- • 0 runs</p>
+              </article>
+              <article class="summary-tile desktop" data-mode="desktop">
+                <p class="tile-label">Desktop Avg</p>
+                <p class="tile-score">--</p>
+                <p class="tile-meta">±-- • 0 runs</p>
+              </article>
+            </div>
+            <table class="metric-summary-table">
+              <thead>
+                <tr>
+                  <th>Metric</th>
+                  <th>Mobile</th>
+                  <th>Desktop</th>
+                </tr>
+              </thead>
+              <tbody class="metric-summary-body"></tbody>
+            </table>
           </section>
-          <section class="mode-panel" data-mode="desktop">
-            <h4>Desktop</h4>
-            <dl>
-              <div><dt>Average score</dt><dd class="score">--</dd></div>
-              <div><dt>95% confidence</dt><dd class="confidence">--</dd></div>
-              <div><dt>Samples</dt><dd class="samples">0</dd></div>
-              <div><dt>Last run</dt><dd class="last-run">--</dd></div>
-            </dl>
+          <section class="score-history-section">
+            <h4>Score Runs</h4>
+            <div class="score-history-scroll">
+              <table class="score-history-table">
+                <thead>
+                  <tr>
+                    <th>Run</th>
+                    <th>Mobile</th>
+                    <th>Desktop</th>
+                  </tr>
+                </thead>
+                <tbody class="score-history-body"></tbody>
+              </table>
+            </div>
           </section>
         </div>
-        <section class="run-log-section">
-          <h4>Run History</h4>
-          <div class="run-log" aria-live="polite"></div>
-        </section>
         <p class="error-text"></p>
       </article>
     </template>
