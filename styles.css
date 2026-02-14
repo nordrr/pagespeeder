@@ -503,7 +503,7 @@ th.sortable.sort-desc::after {
   display: block;
   font-size: 0.68rem;
   color: var(--muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   line-height: 1.2;
   word-break: break-all;
 }
@@ -517,7 +517,7 @@ th.sortable.sort-desc::after {
 
 .comparison-url-only {
   font-size: 0.78rem;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   word-break: break-all;
 }
 

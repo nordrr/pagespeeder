@@ -879,7 +879,16 @@ function renderMetricSummary(tbody, mobileSummary, desktopSummary, renderContext
         mobileMetric.avgValue,
         metric.higherIsBetter,
       );
-      mobileCell.append(createMetricValueBlock(metric, mobileMetric.avgValue, percentile, "mobile"));
+      mobileCell.style.backgroundColor = percentileColor(percentile);
+      mobileCell.append(
+        createMetricValueBlock(
+          metric,
+          mobileMetric.avgValue,
+          percentile,
+          "mobile",
+          false,
+        ),
+      );
     }
     row.append(mobileCell);
 
@@ -893,7 +902,16 @@ function renderMetricSummary(tbody, mobileSummary, desktopSummary, renderContext
         desktopMetric.avgValue,
         metric.higherIsBetter,
       );
-      desktopCell.append(createMetricValueBlock(metric, desktopMetric.avgValue, percentile, "desktop"));
+      desktopCell.style.backgroundColor = percentileColor(percentile);
+      desktopCell.append(
+        createMetricValueBlock(
+          metric,
+          desktopMetric.avgValue,
+          percentile,
+          "desktop",
+          false,
+        ),
+      );
     }
     row.append(desktopCell);
 
@@ -1088,13 +1106,13 @@ function renderComparisonTable(renderContext) {
     const urlCell = document.createElement("td");
     urlCell.className = "comparison-url-cell";
     if (rowData.label) {
-      const urlSmall = document.createElement("span");
-      urlSmall.className = "comparison-url-small";
-      urlSmall.textContent = rowData.url;
       const labelBig = document.createElement("span");
       labelBig.className = "comparison-url-label";
       labelBig.textContent = rowData.label;
-      urlCell.append(urlSmall, labelBig);
+      const urlSmall = document.createElement("span");
+      urlSmall.className = "comparison-url-small";
+      urlSmall.textContent = rowData.url;
+      urlCell.append(labelBig, urlSmall);
     } else {
       urlCell.classList.add("comparison-url-only");
       urlCell.textContent = rowData.url;
