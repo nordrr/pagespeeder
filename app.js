@@ -518,16 +518,16 @@ function createMetricValueBlock(metric, value, percentile, strategy) {
   block.className = "metric-cell";
   block.style.backgroundColor = percentileColor(percentile);
 
-  const valueLine = document.createElement("span");
-  valueLine.className = "metric-cell-value";
-  valueLine.textContent = metric.format(value);
-  block.append(valueLine);
-
   const pointsLine = document.createElement("span");
-  pointsLine.className = "metric-cell-points";
+  pointsLine.className = "metric-cell-value";
   pointsLine.textContent = formatContributionText(strategy, metric.key, value);
   pointsLine.title = `${SCORING_MODEL_VERSION} metric contribution`;
   block.append(pointsLine);
+
+  const valueLine = document.createElement("span");
+  valueLine.className = "metric-cell-points";
+  valueLine.textContent = metric.format(value);
+  block.append(valueLine);
 
   return block;
 }
