@@ -1,6 +1,23 @@
 const PSI_ENDPOINT = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed";
 const STRATEGIES = ["mobile", "desktop"];
 const STORAGE_KEY = "pagespeed-tracker-state-v1";
+const SCORING_MODEL_VERSION = "v10";
+const LH_V10_CURVES = {
+  mobile: {
+    fcp: { weight: 0.10, median: 3000, p10: 1800 },
+    si: { weight: 0.10, median: 5800, p10: 3387 },
+    lcp: { weight: 0.25, median: 4000, p10: 2500 },
+    tbt: { weight: 0.30, median: 600, p10: 200 },
+    cls: { weight: 0.25, median: 0.25, p10: 0.1 },
+  },
+  desktop: {
+    fcp: { weight: 0.10, median: 1600, p10: 934 },
+    si: { weight: 0.10, median: 2300, p10: 1311 },
+    lcp: { weight: 0.25, median: 2400, p10: 1200 },
+    tbt: { weight: 0.30, median: 350, p10: 150 },
+    cls: { weight: 0.25, median: 0.25, p10: 0.1 },
+  },
+};
 
 const METRICS = [
   {
@@ -429,6 +446,92 @@ function wait(ms) {
   });
 }
 
+function internalErf(x) {
+  const sign = x < 0 ? -1 : 1;
+  const absoluteX = Math.abs(x);
+  const a1 = 0.254829592;
+  const a2 = -0.284496736;
+  const a3 = 1.421413741;
+  const a4 = -1.453152027;
+  const a5 = 1.061405429;
+  const p = 0.3275911;
+  const t = 1 / (1 + p * absoluteX);
+  const y = t * (a1 + t * (a2 + t * (a3 + t * (a4 + t * a5))));
+  return sign * (1 - y * Math.exp(-absoluteX * absoluteX));
+}
+
+function derivePodrFromP10(median, p10) {
+  const u = Math.log(median);
+  const shape = Math.abs(Math.log(p10) - u) / (Math.SQRT2 * 0.9061938024368232);
+  const inner = -3 * shape - Math.sqrt(4 + shape * shape);
+  return Math.exp(u + (shape / 2) * inner);
+}
+
+function quantileAtValue(curve, value) {
+  const podr = curve.podr || derivePodrFromP10(curve.median, curve.p10);
+  const location = Math.log(curve.median);
+  const logRatio = Math.log(podr / curve.median);
+  const shape = Math.sqrt(1 - 3 * logRatio - Math.sqrt((logRatio - 3) * (logRatio - 3) - 8)) / 2;
+  const standardizedX = (Math.log(value) - location) / (Math.SQRT2 * shape);
+  return (1 - internalErf(standardizedX)) / 2;
+}
+
+function metricContribution(strategy, metricKey, value) {
+  const strategyCurves = LH_V10_CURVES[strategy];
+  const curve = strategyCurves?.[metricKey];
+  if (!curve || !Number.isFinite(value)) {
+    return null;
+  }
+
+  const safeValue = Math.max(value, 0.000001);
+  const quantile = quantileAtValue(curve, safeValue);
+  const score = Math.max(0, Math.min(1, quantile)) * 100;
+  const maxPoints = curve.weight * 100;
+  return {
+    score,
+    points: (score / 100) * maxPoints,
+    maxPoints,
+  };
+}
+
+function formatPointValue(value) {
+  if (!Number.isFinite(value)) {
+    return "--";
+  }
+  const nearestInt = Math.round(value);
+  if (Math.abs(value - nearestInt) < 0.05) {
+    return String(nearestInt);
+  }
+  return value.toFixed(1);
+}
+
+function formatContributionText(strategy, metricKey, value) {
+  const contribution = metricContribution(strategy, metricKey, value);
+  if (!contribution) {
+    return "(--/-- pts)";
+  }
+  return `(${formatPointValue(contribution.points)}/${formatPointValue(contribution.maxPoints)} pts)`;
+}
+
+function createMetricValueBlock(metric, value, percentile, strategy) {
+  const block = document.createElement("span");
+  block.className = "metric-cell";
+  block.style.backgroundColor = percentileColor(percentile);
+
+  const valueLine = document.createElement("span");
+  valueLine.className = "metric-cell-value";
+  valueLine.textContent = metric.format(value);
+  block.append(valueLine);
+
+  const pointsLine = document.createElement("span");
+  pointsLine.className = "metric-cell-points";
+  pointsLine.textContent = formatContributionText(strategy, metric.key, value);
+  pointsLine.title = `${SCORING_MODEL_VERSION} metric contribution`;
+  block.append(pointsLine);
+
+  return block;
+}
+
 function mixColor(from, to, ratio) {
   const t = Math.max(0, Math.min(1, ratio));
   const red = Math.round(from[0] + (to[0] - from[0]) * t);
@@ -768,11 +871,7 @@ function renderMetricSummary(tbody, mobileSummary, desktopSummary, renderContext
         mobileMetric.avgValue,
         metric.higherIsBetter,
       );
-      const mobileValue = document.createElement("span");
-      mobileValue.className = "metric-cell";
-      mobileValue.style.backgroundColor = percentileColor(percentile);
-      mobileValue.textContent = metric.format(mobileMetric.avgValue);
-      mobileCell.append(mobileValue);
+      mobileCell.append(createMetricValueBlock(metric, mobileMetric.avgValue, percentile, "mobile"));
     }
     row.append(mobileCell);
 
@@ -786,11 +885,7 @@ function renderMetricSummary(tbody, mobileSummary, desktopSummary, renderContext
         desktopMetric.avgValue,
         metric.higherIsBetter,
       );
-      const desktopValue = document.createElement("span");
-      desktopValue.className = "metric-cell";
-      desktopValue.style.backgroundColor = percentileColor(percentile);
-      desktopValue.textContent = metric.format(desktopMetric.avgValue);
-      desktopCell.append(desktopValue);
+      desktopCell.append(createMetricValueBlock(metric, desktopMetric.avgValue, percentile, "desktop"));
     }
     row.append(desktopCell);
 
@@ -976,7 +1071,7 @@ function renderComparisonTable(renderContext) {
         metricResult.avgValue,
         metric.higherIsBetter,
       );
-      const bubble = scoreCell(metric.format(metricResult.avgValue), percentile);
+      const bubble = createMetricValueBlock(metric, metricResult.avgValue, percentile, rowData.mode);
       metricCell.append(bubble);
       row.append(metricCell);
     }

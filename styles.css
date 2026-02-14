@@ -232,10 +232,25 @@ button:disabled {
 
 .metric-cell {
   border-radius: 4px;
-  display: inline-block;
-  min-width: 78px;
-  padding: 2px 6px;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 92px;
+  padding: 3px 6px;
   text-align: center;
+  line-height: 1.1;
+}
+
+.metric-cell-value {
+  font-weight: 800;
+  font-size: 0.9rem;
+}
+
+.metric-cell-points {
+  font-weight: 500;
+  font-size: 0.72rem;
+  color: #31455f;
+  margin-top: 2px;
 }
 
 .error-text {
