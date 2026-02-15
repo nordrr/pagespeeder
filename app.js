@@ -2051,8 +2051,6 @@ function renderSummaryTile(tile, summary, mode, renderContext, options = {}) {
     : Math.max(MIN_STAT_SIG_SAMPLES, Math.ceil(((1.96 * summary.scoreStdDev) / SECONDARY_CI_HALF_WIDTH_POINTS) ** 2));
   const moreRuns = requiredRuns === null ? null : Math.max(0, requiredRuns - summary.samples);
   const moreRunsTight = requiredRunsTight === null ? null : Math.max(0, requiredRunsTight - summary.samples);
-  const moreRunsLabel = moreRuns === 0 ? "✅" : `${moreRuns} more runs`;
-  const moreRunsTightLabel = moreRunsTight === 0 ? "✅" : `${moreRunsTight} more runs`;
   let deltaLine = "";
   if (isBaselineCard) {
     deltaLine = "baseline";
@@ -2065,9 +2063,16 @@ function renderSummaryTile(tile, summary, mode, renderContext, options = {}) {
     deltaLine = formatDeltaPointsAndPercent(delta, baselineSummary.avgScore);
   }
   const mainLine = `${formatConfidence(summary.ci95HalfWidth)} (${summary.samples} runs)`;
-  const subLine = requiredRuns === null || requiredRunsTight === null
-    ? "stat sig ±2: ? more runs\nstat sig ±1: ? more runs"
-    : `stat sig ±2: ${moreRunsLabel}\nstat sig ±1: ${moreRunsTightLabel}`;
+  let subLine = "stat sig ±2: ? more runs";
+  if (requiredRuns !== null && requiredRunsTight !== null) {
+    if (moreRuns > 0) {
+      subLine = `stat sig ±2: ${moreRuns} more runs`;
+    } else if (moreRunsTight > 0) {
+      subLine = `stat sig ±1: ${moreRunsTight} more runs`;
+    } else {
+      subLine = "stat sig ±1: ✅";
+    }
+  }
 
   metaNode.innerHTML = "";
   const main = document.createElement("span");
