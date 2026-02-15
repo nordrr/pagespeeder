@@ -757,6 +757,11 @@ html {
   text-align: left;
 }
 
+.metric-summary-table th:nth-child(2),
+.metric-summary-table th:nth-child(3) {
+  text-align: center;
+}
+
 .metric-summary-table td:nth-child(2),
 .metric-summary-table td:nth-child(3) {
   font-weight: 600;
@@ -846,7 +851,8 @@ html {
 .score-history-table th {
   position: sticky;
   top: 0;
-  background: var(--surface-muted-3);
+  background: var(--surface-muted);
+  border-bottom: 1px solid var(--border);
   z-index: 1;
 }
 

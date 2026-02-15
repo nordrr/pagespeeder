@@ -2,6 +2,7 @@ const PSI_ENDPOINT = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed
 const STRATEGIES = ["mobile", "desktop"];
 const STORAGE_KEY = "pagespeed-tracker-state-v1";
 const THEME_MODES = new Set(["auto", "light", "dark"]);
+const FIXED_POLL_INTERVAL_SEC = 60;
 const SCORING_MODEL_VERSION = "v10";
 const TARGET_CI_HALF_WIDTH_POINTS = 2;
 const SECONDARY_CI_HALF_WIDTH_POINTS = 1;
@@ -63,7 +64,7 @@ const METRICS = [
 
 const state = {
   apiKey: "",
-  pollIntervalSec: 60,
+  pollIntervalSec: FIXED_POLL_INTERVAL_SEC,
   trackers: new Map(),
   trackerOrder: [],
   sort: {
@@ -77,7 +78,6 @@ const state = {
 const settingsForm = document.getElementById("settings-form");
 const addUrlForm = document.getElementById("add-url-form");
 const apiKeyInput = document.getElementById("api-key");
-const pollIntervalInput = document.getElementById("poll-interval");
 const urlInput = document.getElementById("url-input");
 const shopifyPbSuggestion = document.getElementById("shopify-pb-suggestion");
 const shopifyPbAction = document.getElementById("shopify-pb-action");
@@ -303,29 +303,14 @@ clearAllButton.addEventListener("click", () => {
 
 function syncConfigFromInputs() {
   const key = apiKeyInput.value.trim();
-  const interval = Number.parseInt(pollIntervalInput.value, 10);
 
   if (!key) {
     window.alert("Google API key is required.");
     return false;
   }
 
-  if (!Number.isFinite(interval) || interval < 60) {
-    window.alert("Minimum pull interval must be 60 seconds or greater.");
-    return false;
-  }
-
-  const intervalChanged = state.pollIntervalSec !== interval;
   state.apiKey = key;
-  state.pollIntervalSec = interval;
-
-  if (intervalChanged) {
-    for (const tracker of state.trackers.values()) {
-      if (tracker.running && !tracker.inFlight) {
-        scheduleNext(tracker, interval * 1000);
-      }
-    }
-  }
+  state.pollIntervalSec = FIXED_POLL_INTERVAL_SEC;
 
   persistState();
   return true;
@@ -2489,11 +2474,7 @@ function hydrateState() {
       state.apiKey = parsed.apiKey;
       apiKeyInput.value = parsed.apiKey;
     }
-
-    if (Number.isFinite(parsed.pollIntervalSec) && parsed.pollIntervalSec >= 60) {
-      state.pollIntervalSec = parsed.pollIntervalSec;
-      pollIntervalInput.value = String(parsed.pollIntervalSec);
-    }
+    state.pollIntervalSec = FIXED_POLL_INTERVAL_SEC;
 
     if (typeof parsed.themeMode === "string" && THEME_MODES.has(parsed.themeMode)) {
       state.themeMode = parsed.themeMode;

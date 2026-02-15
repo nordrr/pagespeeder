@@ -58,13 +58,10 @@
             Google API Key
             <input id="api-key" name="apiKey" type="password" placeholder="AIza..." required />
           </label>
-          <label>
-            Minimum Pull Interval (seconds)
-            <input id="poll-interval" name="interval" type="number" min="60" step="1" value="60" required />
-          </label>
           <button type="submit">Save Settings</button>
         </form>
         <p class="hint">
+          Poll interval is fixed at <strong>60 seconds</strong> (Google PSI minimum).
           Runs both <strong>mobile</strong> and <strong>desktop</strong> tests each cycle.
           Confidence is shown as a 95% interval: <code>mean ± points</code>.
         </p>
