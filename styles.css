@@ -347,6 +347,12 @@ button.danger:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):
   gap: 12px;
 }
 
+.section-title-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .url-cards {
   margin-top: 12px;
   display: flex;

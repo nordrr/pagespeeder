@@ -68,6 +68,7 @@ const state = {
   trackers: new Map(),
   trackerOrder: [],
   comparisonBaseUrl: null,
+  showDetails: true,
   sort: {
     key: null,
     direction: null,
@@ -89,6 +90,7 @@ const comparisonBody = document.getElementById("comparison-body");
 const startAllButton = document.getElementById("start-all");
 const stopAllButton = document.getElementById("stop-all");
 const clearAllButton = document.getElementById("clear-all");
+const toggleDetailsButton = document.getElementById("toggle-details");
 const themeModeSelect = document.getElementById("theme-mode");
 const runDetailBackdrop = document.getElementById("run-detail-backdrop");
 const runDetailPanel = document.getElementById("run-detail-panel");
@@ -302,6 +304,14 @@ clearAllButton.addEventListener("click", () => {
   closeRunDetailPanel();
   persistState();
   render();
+});
+
+toggleDetailsButton?.addEventListener("click", () => {
+  runWithViewTransition(() => {
+    state.showDetails = !state.showDetails;
+    persistState();
+    render();
+  });
 });
 
 function syncConfigFromInputs() {
@@ -2323,6 +2333,10 @@ function scheduleHeaderHeightSync() {
 }
 
 function render() {
+  if (toggleDetailsButton) {
+    toggleDetailsButton.textContent = state.showDetails ? "Hide Details" : "Show Details";
+    toggleDetailsButton.setAttribute("aria-label", state.showDetails ? "Hide Details" : "Show Details");
+  }
   const renderContext = buildRenderContext();
   renderCards(renderContext);
   renderComparisonTable(renderContext);
@@ -2373,6 +2387,8 @@ function renderCards(renderContext) {
     const scoreHistoryScroll = card.querySelector(".score-history-scroll");
     const scoreHistoryBody = card.querySelector(".score-history-body");
     const metricSummaryBody = card.querySelector(".metric-summary-body");
+    const metricSummaryTable = card.querySelector(".metric-summary-table");
+    const scoreHistorySection = card.querySelector(".score-history-section");
     const mobileTile = card.querySelector(".summary-tile[data-mode='mobile']");
     const desktopTile = card.querySelector(".summary-tile[data-mode='desktop']");
     const errorText = card.querySelector(".error-text");
@@ -2619,12 +2635,20 @@ function renderCards(renderContext) {
       baselineSummary: baseSummaries?.desktop || null,
       isBaselineCard: isBaseCard,
     });
-    renderMetricSummary(metricSummaryBody, mobileSummary, desktopSummary, renderContext, {
-      baselineMobileSummary: baseSummaries?.mobile || null,
-      baselineDesktopSummary: baseSummaries?.desktop || null,
-      isBaselineCard: isBaseCard,
-    });
-    renderScoreHistory(scoreHistoryBody, tracker, renderContext);
+    if (metricSummaryTable) {
+      metricSummaryTable.hidden = !state.showDetails;
+    }
+    if (scoreHistorySection) {
+      scoreHistorySection.hidden = !state.showDetails;
+    }
+    if (state.showDetails) {
+      renderMetricSummary(metricSummaryBody, mobileSummary, desktopSummary, renderContext, {
+        baselineMobileSummary: baseSummaries?.mobile || null,
+        baselineDesktopSummary: baseSummaries?.desktop || null,
+        isBaselineCard: isBaseCard,
+      });
+      renderScoreHistory(scoreHistoryBody, tracker, renderContext);
+    }
     errorText.textContent = tracker.lastError;
 
     urlCardsContainer.append(card);
@@ -2798,6 +2822,7 @@ function persistState() {
       pollIntervalSec: state.pollIntervalSec,
       themeMode: state.themeMode,
       comparisonBaseUrl: state.comparisonBaseUrl,
+      showDetails: state.showDetails,
       trackers: Array.from(state.trackers.values()).map(serializeTracker),
       trackerOrder: state.trackerOrder,
       sort: state.sort,
@@ -2827,6 +2852,9 @@ function hydrateState() {
 
     if (typeof parsed.themeMode === "string" && THEME_MODES.has(parsed.themeMode)) {
       state.themeMode = parsed.themeMode;
+    }
+    if (typeof parsed.showDetails === "boolean") {
+      state.showDetails = parsed.showDetails;
     }
 
     if (parsed.sort && typeof parsed.sort === "object") {
