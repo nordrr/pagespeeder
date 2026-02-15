@@ -379,11 +379,11 @@ button.danger:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):
 
 .drag-handle {
   position: absolute;
-  left: 30px;
+  left: -1px;
   top: -1px;
-  width: 20px;
-  height: 20px;
-  min-width: 20px;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
   padding: 0;
   border: 0;
   border-radius: 6px;
@@ -393,13 +393,22 @@ button.danger:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):
   opacity: 0;
   pointer-events: none;
   cursor: grab;
-  transform: translateX(-4px);
+  transform: translateX(-6px);
   transition: opacity 120ms ease, transform 120ms ease, color 120ms ease;
 }
 
+.drag-handle::before {
+  content: "";
+  position: absolute;
+  left: -10px;
+  top: -10px;
+  right: 0;
+  bottom: 0;
+}
+
 .drag-handle svg {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   fill: currentColor;
 }
 
@@ -434,7 +443,7 @@ button.danger:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):
 
 .url-card-title {
   appearance: none;
-  border: 1px solid transparent;
+  border: 1px dashed transparent;
   background: transparent;
   color: var(--text);
   text-align: left;
@@ -460,17 +469,13 @@ button.danger:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):
 }
 
 .url-card-title::after {
-  content: "";
-  position: absolute;
-  right: 0;
-  top: 0;
-  z-index: 1;
-  opacity: 0;
-  pointer-events: none;
+  content: none;
 }
 
-.url-card-title:hover::after {
-  opacity: 0;
+.drag-handle:hover + .url-card-title {
+  border-style: solid;
+  border-color: var(--hover-border);
+  background: var(--hover-bg);
 }
 
 .url-label-line {
@@ -485,7 +490,7 @@ button.danger:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):
 .title-row:hover .url-label-line,
 .title-row:focus-within .url-label-line,
 .url-card.dragging-active .url-label-line {
-  transform: translateX(26px);
+  transform: translateX(18px);
 }
 
 .url-title-url {

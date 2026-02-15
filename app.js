@@ -1873,7 +1873,8 @@ function renderCards(renderContext) {
     labelLine.textContent = hasLabel ? tracker.label : "Add a label";
     urlLine.textContent = tracker.url;
     title.classList.toggle("no-label", !hasLabel);
-    title.dataset.hint = hasLabel ? "Edit label" : "Add a label";
+    title.dataset.tooltip = hasLabel ? "Edit label" : "Add label";
+    attachTooltipHandlers(title);
 
     title.addEventListener("click", () => {
       card.classList.add("is-editing-label");
@@ -1894,6 +1895,9 @@ function renderCards(renderContext) {
       dragHandle.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
+        if (typeof event.stopImmediatePropagation === "function") {
+          event.stopImmediatePropagation();
+        }
       });
       dragHandle.addEventListener("dragstart", (event) => {
         draggedTrackerUrl = tracker.url;
