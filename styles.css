@@ -303,6 +303,28 @@ button:disabled {
   fill: currentColor;
 }
 
+.toggle-run.is-running {
+  background: #0d8a49;
+  border-color: #0d8a49;
+  color: #ffffff;
+}
+
+.toggle-run.is-running:hover {
+  background: #0a733c;
+  border-color: #0a733c;
+}
+
+.toggle-run.is-paused {
+  background: #edf1f5;
+  border-color: #cfd6e1;
+  color: #4b5563;
+}
+
+.toggle-run.is-paused:hover {
+  background: #e2e8f0;
+  border-color: #b9c3d1;
+}
+
 .url-card-content {
   display: grid;
   gap: 8px;

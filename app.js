@@ -1630,6 +1630,8 @@ function renderCards(renderContext) {
     const iconRunNow = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2L8 6l4 4V7c3.3 0 6 2.7 6 6 0 1.4-.5 2.7-1.3 3.7l1.5 1.5A7.95 7.95 0 0 0 20 13c0-4.4-3.6-8-8-8zM6 13c0-1.4.5-2.7 1.3-3.7L5.8 7.8A7.95 7.95 0 0 0 4 13c0 4.4 3.6 8 8 8v3l4-4-4-4v3c-3.3 0-6-2.7-6-6z"/></svg>';
     const iconTrash = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v9h-2V9zm4 0h2v9h-2V9zM7 9h2v9H7V9z"/></svg>';
 
+    toggleButton.classList.toggle("is-running", tracker.running);
+    toggleButton.classList.toggle("is-paused", !tracker.running);
     toggleButton.innerHTML = tracker.running ? iconPause : iconPlay;
     toggleButton.setAttribute("aria-label", tracker.running ? "Pause" : "Resume");
     toggleButton.dataset.tooltip = tracker.running ? "Pause" : "Resume";
