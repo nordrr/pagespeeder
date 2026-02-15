@@ -119,6 +119,7 @@ let dragDidDrop = false;
 let dragEndCleanupTimerId = null;
 let transparentDragImage = null;
 let pendingLabelEditUrl = null;
+let suppressLabelBlurCommit = false;
 const systemThemeQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
 if (runDetailBackdrop) {
@@ -708,6 +709,50 @@ function beginLabelEditing(url) {
   labelInput.focus();
   labelInput.select();
   return true;
+}
+
+function getActiveLabelEditState() {
+  const active = document.activeElement;
+  if (!(active instanceof HTMLInputElement) || !active.classList.contains("url-label-input")) {
+    return null;
+  }
+
+  const card = active.closest(".url-card[data-url]");
+  const url = card?.dataset.url;
+  if (!url) {
+    return null;
+  }
+
+  const value = active.value ?? "";
+  const fallbackCaret = value.length;
+  return {
+    url,
+    value,
+    selectionStart: typeof active.selectionStart === "number" ? active.selectionStart : fallbackCaret,
+    selectionEnd: typeof active.selectionEnd === "number" ? active.selectionEnd : fallbackCaret,
+  };
+}
+
+function restoreLabelEditState(editState) {
+  if (!editState?.url) {
+    return;
+  }
+
+  const cards = Array.from(urlCardsContainer.querySelectorAll(".url-card[data-url]"));
+  const card = cards.find((entry) => entry.dataset.url === editState.url);
+  const labelInput = card?.querySelector(".url-label-input");
+  if (!card || !labelInput) {
+    return;
+  }
+
+  card.classList.add("is-editing-label");
+  labelInput.value = editState.value ?? "";
+  labelInput.focus({ preventScroll: true });
+
+  const length = labelInput.value.length;
+  const start = Math.max(0, Math.min(length, editState.selectionStart ?? length));
+  const end = Math.max(start, Math.min(length, editState.selectionEnd ?? start));
+  labelInput.setSelectionRange(start, end);
 }
 
 function viewTransitionNameForUrl(url) {
@@ -2346,20 +2391,29 @@ function scheduleHeaderHeightSync() {
 }
 
 function render() {
+  const labelEditState = getActiveLabelEditState();
+  suppressLabelBlurCommit = Boolean(labelEditState);
   const active = document.activeElement;
   if (active instanceof Element && active.matches("#comparison-table th.sortable")) {
     active.blur();
   }
-  if (toggleDetailsButton) {
-    toggleDetailsButton.textContent = state.showDetails ? "Hide Details" : "Show Details";
-    toggleDetailsButton.setAttribute("aria-label", state.showDetails ? "Hide Details" : "Show Details");
+  try {
+    if (toggleDetailsButton) {
+      toggleDetailsButton.textContent = state.showDetails ? "Hide Details" : "Show Details";
+      toggleDetailsButton.setAttribute("aria-label", state.showDetails ? "Hide Details" : "Show Details");
+    }
+    const renderContext = buildRenderContext();
+    renderCards(renderContext);
+    renderComparisonTable(renderContext);
+    renderRunDetailPanel();
+    if (labelEditState) {
+      restoreLabelEditState(labelEditState);
+    }
+    refreshLiveStatusText();
+    scheduleHeaderHeightSync();
+  } finally {
+    suppressLabelBlurCommit = false;
   }
-  const renderContext = buildRenderContext();
-  renderCards(renderContext);
-  renderComparisonTable(renderContext);
-  renderRunDetailPanel();
-  refreshLiveStatusText();
-  scheduleHeaderHeightSync();
 }
 
 function renderCards(renderContext) {
@@ -2523,6 +2577,9 @@ function renderCards(renderContext) {
       }
     });
     labelInput.addEventListener("blur", () => {
+      if (suppressLabelBlurCommit) {
+        return;
+      }
       commitLabel();
     });
 
