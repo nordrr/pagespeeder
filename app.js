@@ -331,6 +331,7 @@ function createTracker(url) {
     lastError: "",
     phase: "paused",
     activeStrategy: null,
+    autoPauseArmed: false,
     removeConfirmArmed: false,
     removeConfirmReadyAt: 0,
     removeConfirmLockTimerId: null,
@@ -344,6 +345,7 @@ function startTracker(tracker, runImmediately = false) {
   }
 
   tracker.running = true;
+  tracker.autoPauseArmed = false;
   tracker.lastError = "";
   if (tracker.timerId) {
     clearTimeout(tracker.timerId);
@@ -906,6 +908,12 @@ async function runCycle(tracker) {
   await Promise.all(strategyRuns);
 
   tracker.inFlight = false;
+  if (tracker.running && shouldAutoPauseAtOnePoint(tracker)) {
+    render();
+    persistState();
+    return;
+  }
+
   if (tracker.running) {
     tracker.phase = "waiting";
     tracker.activeStrategy = null;
@@ -920,6 +928,36 @@ async function runCycle(tracker) {
 
   render();
   persistState();
+}
+
+function shouldAutoPauseAtOnePoint(tracker) {
+  const threshold = SECONDARY_CI_HALF_WIDTH_POINTS;
+  const mobileCi = summarize(tracker.history.mobile)?.ci95HalfWidth;
+  const desktopCi = summarize(tracker.history.desktop)?.ci95HalfWidth;
+
+  const hasAboveThreshold =
+    (Number.isFinite(mobileCi) && mobileCi > threshold) ||
+    (Number.isFinite(desktopCi) && desktopCi > threshold);
+  if (hasAboveThreshold) {
+    tracker.autoPauseArmed = true;
+  }
+
+  const bothWithinThreshold =
+    Number.isFinite(mobileCi) &&
+    Number.isFinite(desktopCi) &&
+    mobileCi <= threshold &&
+    desktopCi <= threshold;
+
+  if (!tracker.autoPauseArmed || !bothWithinThreshold) {
+    return false;
+  }
+
+  tracker.running = false;
+  tracker.phase = "paused";
+  tracker.activeStrategy = null;
+  tracker.nextRunAt = null;
+  tracker.autoPauseArmed = false;
+  return true;
 }
 
 async function fetchPsiSample(url, strategy, apiKey) {
@@ -2439,6 +2477,7 @@ function serializeTracker(tracker) {
     lastError: tracker.lastError,
     phase: tracker.phase,
     activeStrategy: tracker.activeStrategy,
+    autoPauseArmed: tracker.autoPauseArmed === true,
   };
 }
 
@@ -2515,6 +2554,7 @@ function hydrateState() {
         }
         tracker.activeStrategy =
           typeof stored.activeStrategy === "string" ? stored.activeStrategy : null;
+        tracker.autoPauseArmed = stored.autoPauseArmed === true;
 
         state.trackers.set(url, tracker);
       }
