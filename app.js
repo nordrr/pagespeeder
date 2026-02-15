@@ -204,8 +204,13 @@ document.addEventListener("pointerdown", (event) => {
 
 for (const header of sortableHeaders) {
   header.tabIndex = 0;
+  header.addEventListener("mousedown", (event) => {
+    // Prevent sticky focus on click; focused sticky headers can trigger viewport jumps on rerender.
+    event.preventDefault();
+  });
   header.addEventListener("click", () => {
     toggleSort(header.dataset.sortKey);
+    header.blur();
   });
   header.addEventListener("keydown", (event) => {
     if (event.key !== "Enter" && event.key !== " ") {
@@ -2333,6 +2338,10 @@ function scheduleHeaderHeightSync() {
 }
 
 function render() {
+  const active = document.activeElement;
+  if (active instanceof Element && active.matches("#comparison-table th.sortable")) {
+    active.blur();
+  }
   if (toggleDetailsButton) {
     toggleDetailsButton.textContent = state.showDetails ? "Hide Details" : "Show Details";
     toggleDetailsButton.setAttribute("aria-label", state.showDetails ? "Hide Details" : "Show Details");
