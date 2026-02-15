@@ -2552,9 +2552,11 @@ function renderCards(renderContext) {
       setBaselineButton.dataset.tooltip = isBaseCard ? "Clear comparison baseline" : "Set as comparison baseline";
       attachTooltipHandlers(setBaselineButton);
       setBaselineButton.addEventListener("click", () => {
-        state.comparisonBaseUrl = isBaseCard ? null : tracker.url;
-        persistState();
-        render();
+        runWithViewTransition(() => {
+          state.comparisonBaseUrl = isBaseCard ? null : tracker.url;
+          persistState();
+          render();
+        });
       });
     }
 
