@@ -41,6 +41,8 @@
   --tooltip-bg: #111827;
   --tooltip-text: #f9fafb;
   --comparison-cell-text: #111827;
+  --delta-pill-bg: #ffffff;
+  --delta-pill-text: #111827;
   --font-sans: "Roboto", "Segoe UI", sans-serif;
   --font-mono: "Roboto Mono", "SFMono-Regular", Menlo, monospace;
   --accent: #115cce;
@@ -96,6 +98,8 @@
   --tooltip-bg: #020617;
   --tooltip-text: #e5e7eb;
   --comparison-cell-text: #e5e7eb;
+  --delta-pill-bg: #ffffff;
+  --delta-pill-text: #111827;
   --accent: #3b82f6;
   --accent-hover: #2563eb;
   --danger: #f87171;
@@ -369,14 +373,9 @@ button.danger:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):
 }
 
 .url-card > header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: flex-start;
-  column-gap: 8px;
-  row-gap: 8px;
+  display: block;
   margin-bottom: 10px;
-  position: static;
-  padding-right: 0;
+  position: relative;
 }
 
 .url-card > header > div:first-child {
@@ -387,6 +386,7 @@ button.danger:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):
 .title-row {
   position: relative;
   min-width: 0;
+  padding-right: 136px;
 }
 
 .drag-handle {
@@ -452,12 +452,17 @@ button.danger:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):
   row-gap: 5px;
   flex: 1 1 220px;
   min-width: 0;
+  width: 100%;
 }
 
 .title-row,
 .url-label-input {
   grid-row: 1;
   align-self: start;
+}
+
+.url-label-input {
+  padding-right: 136px;
 }
 
 .url-card-title {
@@ -561,9 +566,12 @@ button.danger:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):
 .url-card-actions {
   display: flex;
   gap: 4px;
-  position: static;
+  position: absolute;
+  top: 0;
+  right: 0;
   flex-wrap: nowrap;
   align-self: start;
+  z-index: 5;
 }
 
 .icon-btn {
@@ -581,6 +589,22 @@ button.danger:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):
   width: 14px;
   height: 14px;
   fill: currentColor;
+}
+
+.set-baseline.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
+.set-baseline.is-active:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: #ffffff;
+}
+
+.url-card.comparison-base {
+  border-color: var(--accent);
 }
 
 .icon-btn.remove-confirm {
@@ -740,6 +764,20 @@ html {
   font-size: 0.77rem;
 }
 
+.tile-meta-delta {
+  display: inline-block;
+  width: fit-content;
+  max-width: 100%;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 0.68rem;
+  color: var(--delta-pill-text);
+  font-family: var(--font-mono);
+  background: var(--delta-pill-bg);
+  margin-top: 1px;
+  white-space: normal;
+}
+
 .tile-meta-sub {
   font-size: 0.68rem;
   color: var(--muted);
@@ -820,6 +858,19 @@ html {
   color: var(--text);
   opacity: 0.66;
   margin-top: 1px;
+}
+
+.metric-delta-value {
+  font-weight: 500;
+  font-size: 0.62rem;
+  max-width: 100%;
+  color: var(--delta-pill-text);
+  background: var(--delta-pill-bg);
+  border-radius: 8px;
+  padding: 1px 5px;
+  line-height: 1.2;
+  margin-top: 2px;
+  white-space: normal;
 }
 
 .error-text {
@@ -1326,11 +1377,18 @@ body.run-detail-open .run-detail-panel {
   }
 
   .url-card > header {
-    grid-template-columns: 1fr;
+    display: block;
   }
 
   .url-card-actions {
+    position: static;
+    margin-top: 4px;
     justify-self: start;
+  }
+
+  .title-row,
+  .url-label-input {
+    padding-right: 0;
   }
 
   .url-card-title {
