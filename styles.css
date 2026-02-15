@@ -9,6 +9,7 @@
   --accent: #115cce;
   --danger: #ad1e1e;
   --shadow: 0 8px 22px rgba(21, 34, 56, 0.08);
+  --panel-ease: cubic-bezier(0.869, -0.05, 0.124, 1.086);
   --score-low: hsl(3 66% 74%);
   --score-mid: hsl(43 84% 76%);
   --score-high: hsl(144 43% 68%);
@@ -661,6 +662,17 @@ th.sortable.sort-desc::after {
   inset: 0;
   background: rgba(17, 24, 39, 0.36);
   z-index: 30;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 220ms var(--panel-ease), visibility 0s linear 220ms;
+}
+
+body.run-detail-open .run-detail-backdrop {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity 220ms var(--panel-ease);
 }
 
 .run-detail-panel {
@@ -671,16 +683,19 @@ th.sortable.sort-desc::after {
   width: min(440px, 96vw);
   background: #fff;
   border-left: 1px solid #d1d5db;
-  box-shadow: -18px 0 36px rgba(15, 23, 42, 0.2);
+  box-shadow: none;
   transform: translateX(102%);
-  transition: transform 220ms ease;
+  transition: transform 220ms var(--panel-ease);
   z-index: 31;
   display: grid;
   grid-template-rows: auto 1fr;
+  pointer-events: none;
 }
 
 body.run-detail-open .run-detail-panel {
   transform: translateX(0);
+  box-shadow: -18px 0 36px rgba(15, 23, 42, 0.2);
+  pointer-events: auto;
 }
 
 .run-detail-header {

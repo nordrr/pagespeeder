@@ -96,6 +96,11 @@ let tooltipShowTimerId = null;
 let tooltipHideTimerId = null;
 let headerSyncRafId = null;
 
+if (runDetailBackdrop) {
+  // Keep mounted so CSS opacity/visibility transitions can animate.
+  runDetailBackdrop.hidden = false;
+}
+
 runDetailCloseButton?.addEventListener("click", () => {
   closeRunDetailPanel();
 });
@@ -857,9 +862,9 @@ function formatStrategyLabel(strategy) {
 function describeTrackerStatus(tracker) {
   if (tracker.phase === "awaiting-google") {
     if (!tracker.running) {
-      return `Paused (waiting for Google PageSpeed result: ${formatStrategyLabel(tracker.activeStrategy)})`;
+      return `Paused (awaiting ${formatStrategyLabel(tracker.activeStrategy)})`;
     }
-    return `Waiting for Google PageSpeed result (${formatStrategyLabel(tracker.activeStrategy)})`;
+    return `Running Google PageSpeed (${formatStrategyLabel(tracker.activeStrategy)})`;
   }
 
   if (!tracker.running) {
@@ -1323,7 +1328,6 @@ function renderRunDetailPanel() {
   if (!state.runDetail) {
     document.body.classList.remove("run-detail-open");
     runDetailPanel.setAttribute("aria-hidden", "true");
-    runDetailBackdrop.hidden = true;
     runDetailContent.innerHTML = "";
     const placeholder = document.createElement("p");
     placeholder.className = "placeholder";
@@ -1334,7 +1338,6 @@ function renderRunDetailPanel() {
 
   document.body.classList.add("run-detail-open");
   runDetailPanel.setAttribute("aria-hidden", "false");
-  runDetailBackdrop.hidden = false;
   runDetailContent.innerHTML = "";
 
   const detail = state.runDetail;
