@@ -2051,7 +2051,7 @@ function renderSummaryTile(tile, summary, mode, renderContext, options = {}) {
     : Math.max(MIN_STAT_SIG_SAMPLES, Math.ceil(((1.96 * summary.scoreStdDev) / SECONDARY_CI_HALF_WIDTH_POINTS) ** 2));
   const moreRuns = requiredRuns === null ? null : Math.max(0, requiredRuns - summary.samples);
   const moreRunsTight = requiredRunsTight === null ? null : Math.max(0, requiredRunsTight - summary.samples);
-  const formatMoreRuns = (count) => `${count} more run${count === 1 ? "" : "s"}`;
+  const formatRuns = (count) => `${count} run${count === 1 ? "" : "s"}`;
   let deltaLine = "";
   if (isBaselineCard) {
     deltaLine = "baseline";
@@ -2064,14 +2064,14 @@ function renderSummaryTile(tile, summary, mode, renderContext, options = {}) {
     deltaLine = formatDeltaPointsAndPercent(delta, baselineSummary.avgScore);
   }
   const mainLine = `${formatConfidence(summary.ci95HalfWidth)} (${summary.samples} runs)`;
-  let subLine = "stat sig ±2: ? more runs";
+  let subLine = "stat sig ±2 in ? runs";
   if (requiredRuns !== null && requiredRunsTight !== null) {
     if (moreRuns > 0) {
-      subLine = `stat sig ±2: ${formatMoreRuns(moreRuns)}`;
+      subLine = `stat sig ±2 in ${formatRuns(moreRuns)}`;
     } else if (moreRunsTight > 0) {
-      subLine = `stat sig ±1: ${formatMoreRuns(moreRunsTight)}`;
+      subLine = `stat sig ±1 in ${formatRuns(moreRunsTight)}`;
     } else {
-      subLine = "stat sig ±1: ✅";
+      subLine = "stat sig ±1 ✅";
     }
   }
 
