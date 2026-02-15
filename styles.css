@@ -50,6 +50,7 @@
   --danger: #ad1e1e;
   --shadow: 0 8px 22px rgba(21, 34, 56, 0.08);
   --panel-ease: cubic-bezier(0.43, 0.54, 0, 0.97);
+  --url-actions-reserve: 132px;
   --score-low: hsl(3 66% 74%);
   --score-mid: hsl(43 84% 76%);
   --score-high: hsl(144 43% 68%);
@@ -386,7 +387,7 @@ button.danger:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):
 .title-row {
   position: relative;
   min-width: 0;
-  padding-right: 136px;
+  padding-right: var(--url-actions-reserve);
 }
 
 .drag-handle {
@@ -448,6 +449,7 @@ button.danger:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):
 
 .url-identity {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr) auto;
   row-gap: 5px;
   flex: 1 1 220px;
@@ -457,12 +459,9 @@ button.danger:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):
 
 .title-row,
 .url-label-input {
+  grid-column: 1;
   grid-row: 1;
   align-self: start;
-}
-
-.url-label-input {
-  padding-right: 136px;
 }
 
 .url-card-title {
@@ -540,23 +539,48 @@ button.danger:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):
   background: var(--input-bg);
   padding: 7px 9px;
   font-size: 0.92rem;
-  width: 100%;
+  width: calc(100% - var(--url-actions-reserve));
+  justify-self: start;
 }
 
 .url-card.is-editing-label .url-card-title {
-  display: none;
+  display: block;
+  pointer-events: none;
+  border-color: transparent !important;
+  background: transparent !important;
+  padding: 0 6px;
+  margin-top: 0;
 }
 
 .url-card.is-editing-label .url-label-input {
   display: block;
+  grid-row: 1;
+}
+
+.url-card.is-editing-label .title-row {
+  grid-row: 2;
+  padding-right: 0;
 }
 
 .url-card.is-editing-label .drag-handle {
   display: none;
 }
 
+.url-card.is-editing-label .url-label-line {
+  display: none;
+}
+
+.url-card.is-editing-label .url-title-url {
+  margin-top: 0;
+}
+
+.url-card.is-editing-label .url-card-meta {
+  grid-row: 3;
+}
+
 .url-card-meta {
   margin: 0;
+  grid-column: 1;
   grid-row: 2;
   align-self: end;
   font-size: 0.83rem;
@@ -1390,6 +1414,8 @@ body.run-detail-open .run-detail-panel {
   .title-row,
   .url-label-input {
     padding-right: 0;
+    width: 100%;
+    justify-self: stretch;
   }
 
   .url-card-title {

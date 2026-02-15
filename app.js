@@ -116,6 +116,7 @@ let dragPreviewAnimating = false;
 let dragDidDrop = false;
 let dragEndCleanupTimerId = null;
 let transparentDragImage = null;
+let pendingLabelEditUrl = null;
 const systemThemeQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
 if (runDetailBackdrop) {
@@ -657,6 +658,38 @@ function runWithViewTransition(update) {
     return;
   }
   update();
+}
+
+function beginLabelEditing(url) {
+  if (!url) {
+    return false;
+  }
+  const tracker = state.trackers.get(url);
+  if (!tracker) {
+    return false;
+  }
+  const cards = Array.from(urlCardsContainer.querySelectorAll(".url-card[data-url]"));
+  const card = cards.find((entry) => entry.dataset.url === url);
+  if (!card) {
+    return false;
+  }
+
+  for (const entry of cards) {
+    if (entry !== card) {
+      entry.classList.remove("is-editing-label");
+    }
+  }
+
+  const labelInput = card.querySelector(".url-label-input");
+  if (!labelInput) {
+    return false;
+  }
+
+  card.classList.add("is-editing-label");
+  labelInput.value = tracker.label || "";
+  labelInput.focus();
+  labelInput.select();
+  return true;
 }
 
 function viewTransitionNameForUrl(url) {
@@ -2351,11 +2384,13 @@ function renderCards(renderContext) {
     title.dataset.tooltip = hasLabel ? "Edit label" : "Add label";
     attachTooltipHandlers(title);
 
-    title.addEventListener("click", () => {
-      card.classList.add("is-editing-label");
-      labelInput.value = tracker.label || "";
-      labelInput.focus();
-      labelInput.select();
+    title.addEventListener("pointerdown", () => {
+      pendingLabelEditUrl = tracker.url;
+    });
+    title.addEventListener("click", (event) => {
+      event.preventDefault();
+      pendingLabelEditUrl = null;
+      beginLabelEditing(tracker.url);
     });
 
     if (dragHandle) {
@@ -2419,14 +2454,28 @@ function renderCards(renderContext) {
       if (didCancelLabelEdit) {
         return;
       }
+      const resumeEditUrl = pendingLabelEditUrl;
+      pendingLabelEditUrl = null;
       tracker.label = labelInput.value.trim();
       persistState();
       render();
+      if (resumeEditUrl && resumeEditUrl !== tracker.url) {
+        requestAnimationFrame(() => {
+          beginLabelEditing(resumeEditUrl);
+        });
+      }
     };
     const cancelLabel = () => {
       didCancelLabelEdit = true;
+      const resumeEditUrl = pendingLabelEditUrl;
+      pendingLabelEditUrl = null;
       card.classList.remove("is-editing-label");
       render();
+      if (resumeEditUrl && resumeEditUrl !== tracker.url) {
+        requestAnimationFrame(() => {
+          beginLabelEditing(resumeEditUrl);
+        });
+      }
     };
 
     labelInput.addEventListener("keydown", (event) => {
