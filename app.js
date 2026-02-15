@@ -94,6 +94,7 @@ const TOOLTIP_HIDE_GRACE_MS = 120;
 let tooltipAnchor = null;
 let tooltipShowTimerId = null;
 let tooltipHideTimerId = null;
+let headerSyncRafId = null;
 
 runDetailCloseButton?.addEventListener("click", () => {
   closeRunDetailPanel();
@@ -108,6 +109,7 @@ document.addEventListener("keydown", (event) => {
 });
 window.addEventListener("scroll", () => hideTooltip(), true);
 window.addEventListener("resize", () => hideTooltip());
+window.addEventListener("resize", () => scheduleHeaderHeightSync());
 
 for (const header of sortableHeaders) {
   header.tabIndex = 0;
@@ -1432,12 +1434,63 @@ function renderRunDetailPanel() {
   runDetailContent.append(metricTable);
 }
 
+function syncUrlCardHeaderHeights() {
+  const headers = Array.from(urlCardsContainer.querySelectorAll(".url-card > header"));
+  const titles = Array.from(urlCardsContainer.querySelectorAll(".url-card-title"));
+  if (!titles.length) {
+    return;
+  }
+
+  // Clear legacy header equalization first.
+  for (const header of headers) {
+    header.style.minHeight = "";
+  }
+  for (const title of titles) {
+    title.style.minHeight = "";
+  }
+
+  const isMobileLayout = window.matchMedia("(max-width: 720px)").matches;
+  if (isMobileLayout) {
+    return;
+  }
+
+  const gridTemplate = getComputedStyle(urlCardsContainer).gridTemplateColumns;
+  const columnCount = gridTemplate === "none" ? 1 : gridTemplate.trim().split(/\s+/).length;
+  if (columnCount < 2) {
+    return;
+  }
+
+  const visibleTitles = titles.filter((title) => title.offsetParent !== null);
+  if (!visibleTitles.length) {
+    return;
+  }
+
+  const maxHeight = Math.max(
+    ...visibleTitles.map((title) => Math.ceil(title.getBoundingClientRect().height)),
+  );
+
+  for (const title of visibleTitles) {
+    title.style.minHeight = `${maxHeight}px`;
+  }
+}
+
+function scheduleHeaderHeightSync() {
+  if (headerSyncRafId !== null) {
+    cancelAnimationFrame(headerSyncRafId);
+  }
+  headerSyncRafId = requestAnimationFrame(() => {
+    headerSyncRafId = null;
+    syncUrlCardHeaderHeights();
+  });
+}
+
 function render() {
   const renderContext = buildRenderContext();
   renderCards(renderContext);
   renderComparisonTable(renderContext);
   renderRunDetailPanel();
   refreshLiveStatusText();
+  scheduleHeaderHeightSync();
 }
 
 function renderCards(renderContext) {
@@ -1718,6 +1771,7 @@ function refreshLiveStatusText() {
     }
     meta.textContent = `Status: ${describeTrackerStatus(tracker)}`;
   }
+  scheduleHeaderHeightSync();
 }
 
 setInterval(() => {
