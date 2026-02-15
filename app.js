@@ -91,7 +91,7 @@ const runDetailCloseButton = document.getElementById("run-detail-close");
 const runDetailContent = document.getElementById("run-detail-content");
 const uiTooltip = document.getElementById("ui-tooltip");
 const SORTABLE_KEYS = new Set(["url", "mode", "avgScore", "confidence", "samples", "fcp", "si", "lcp", "tbt", "cls"]);
-const TOOLTIP_DELAY_MS = 500;
+const TOOLTIP_DELAY_MS = 250;
 const TOOLTIP_HIDE_GRACE_MS = 120;
 
 let tooltipAnchor = null;
