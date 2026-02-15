@@ -77,6 +77,8 @@ const addUrlForm = document.getElementById("add-url-form");
 const apiKeyInput = document.getElementById("api-key");
 const pollIntervalInput = document.getElementById("poll-interval");
 const urlInput = document.getElementById("url-input");
+const shopifyPbSuggestion = document.getElementById("shopify-pb-suggestion");
+const shopifyPbAction = document.getElementById("shopify-pb-action");
 const urlCardsContainer = document.getElementById("url-cards");
 const urlCardTemplate = document.getElementById("url-card-template");
 const sortableHeaders = Array.from(document.querySelectorAll("#comparison-table th.sortable"));
@@ -208,7 +210,23 @@ addUrlForm.addEventListener("submit", (event) => {
   persistState();
 
   urlInput.value = "";
+  updateShopifyPbSuggestion();
   render();
+});
+
+urlInput?.addEventListener("input", () => {
+  updateShopifyPbSuggestion();
+});
+
+shopifyPbAction?.addEventListener("click", (event) => {
+  event.preventDefault();
+  const withPb = addShopifyPbParam(urlInput.value.trim());
+  if (!withPb) {
+    return;
+  }
+  urlInput.value = withPb;
+  updateShopifyPbSuggestion();
+  urlInput.focus();
 });
 
 startAllButton.addEventListener("click", () => {
@@ -758,12 +776,46 @@ function ci95(values) {
   return 1.96 * standardError;
 }
 
-function normalizeUrl(value) {
+function parseUrlSafe(value) {
   try {
-    return new URL(value).toString();
+    return new URL(value);
   } catch {
+    return null;
+  }
+}
+
+function isShopifyPreviewHost(hostname) {
+  const host = String(hostname || "").toLowerCase();
+  return host === "shopifypreview.com" || host.endsWith(".shopifypreview.com");
+}
+
+function addShopifyPbParam(urlValue) {
+  const url = parseUrlSafe(urlValue);
+  if (!url || !isShopifyPreviewHost(url.hostname)) {
     return "";
   }
+  url.searchParams.set("pb", "0");
+  return url.toString();
+}
+
+function shouldSuggestShopifyPb(urlValue) {
+  const url = parseUrlSafe(urlValue);
+  if (!url || !isShopifyPreviewHost(url.hostname)) {
+    return false;
+  }
+  return url.searchParams.get("pb") !== "0";
+}
+
+function updateShopifyPbSuggestion() {
+  if (!shopifyPbSuggestion || !urlInput) {
+    return;
+  }
+  const shouldShow = shouldSuggestShopifyPb(urlInput.value.trim());
+  shopifyPbSuggestion.hidden = !shouldShow;
+}
+
+function normalizeUrl(value) {
+  return parseUrlSafe(value)?.toString() || "";
 }
 
 function internalErf(x) {
@@ -2076,6 +2128,7 @@ function hydrateState() {
 
 hydrateState();
 applyThemeMode();
+updateShopifyPbSuggestion();
 for (const tracker of state.trackers.values()) {
   if (tracker.running) {
     startTracker(tracker);

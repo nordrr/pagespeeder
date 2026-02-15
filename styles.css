@@ -188,6 +188,23 @@ main {
   align-items: end;
 }
 
+#add-url-form {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+}
+
+#add-url-form > label {
+  grid-column: 1;
+  min-width: 0;
+}
+
+#add-url-form > button[type="submit"] {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+  white-space: nowrap;
+}
+
 label {
   display: grid;
   gap: 5px;
@@ -237,26 +254,26 @@ button:disabled {
   cursor: not-allowed;
 }
 
-button:not(.url-card-title):not(.run-score-button):not(:disabled):hover {
+button:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(:disabled):hover {
   box-shadow: var(--button-hover-shadow);
   transform: translateY(-1px);
 }
 
-button:not(.url-card-title):not(.run-score-button):not(:disabled):active {
+button:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(:disabled):active {
   transform: translateY(0);
 }
 
-button:not(.url-card-title):not(.run-score-button):not(.secondary):not(.danger):not(:disabled):hover {
+button:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(.secondary):not(.danger):not(:disabled):hover {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
 }
 
-button.secondary:not(.url-card-title):not(.run-score-button):not(:disabled):hover {
+button.secondary:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(:disabled):hover {
   background: var(--button-secondary-hover-bg);
   border-color: var(--button-secondary-hover-border);
 }
 
-button.danger:not(.url-card-title):not(.run-score-button):not(:disabled):hover {
+button.danger:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(:disabled):hover {
   background: var(--button-danger-hover-bg);
   border-color: var(--button-danger-hover-border);
 }
@@ -264,6 +281,47 @@ button.danger:not(.url-card-title):not(.run-score-button):not(:disabled):hover {
 .hint {
   margin-top: 10px;
   color: var(--muted);
+}
+
+.inline-hint {
+  margin: -4px 0 2px;
+  font-size: 0.82rem;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.inline-hint[hidden] {
+  display: none !important;
+}
+
+#add-url-form .inline-hint {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.inline-link-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  padding: 0;
+  margin: 0;
+  font-size: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.inline-link-btn code {
+  font-family: var(--font-mono);
+}
+
+.inline-link-btn:hover {
+  color: var(--accent-hover);
 }
 
 .section-title-row {
@@ -355,6 +413,10 @@ button.danger:not(.url-card-title):not(.run-score-button):not(:disabled):hover {
   top: 6px;
   font-size: 0.7rem;
   color: var(--muted);
+  background: var(--card-bg);
+  border-radius: 4px;
+  padding: 1px 4px;
+  z-index: 1;
   opacity: 0;
   pointer-events: none;
 }
@@ -1071,6 +1133,21 @@ body.run-detail-open .run-detail-panel {
 
   .controls-panel form {
     grid-template-columns: 1fr;
+  }
+
+  #add-url-form {
+    grid-template-columns: 1fr;
+  }
+
+  #add-url-form > button[type="submit"] {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: stretch;
+  }
+
+  #add-url-form .inline-hint {
+    grid-column: 1;
+    grid-row: auto;
   }
 
   .url-cards {
