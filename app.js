@@ -106,6 +106,7 @@ const DRAG_PREVIEW_SCALE = 0.25;
 const DRAG_PREVIEW_OFFSET = 10;
 const DRAG_PREVIEW_FADE_IN_MS = 90;
 const DRAG_PREVIEW_FADE_OUT_MS = 140;
+const ICON_BASELINE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 2h2v3.06A7.002 7.002 0 0 1 18.94 11H22v2h-3.06A7.002 7.002 0 0 1 13 18.94V22h-2v-3.06A7.002 7.002 0 0 1 5.06 13H2v-2h3.06A7.002 7.002 0 0 1 11 5.06V2Zm1 5a5 5 0 1 0 0 10 5 5 0 0 0 0-10Zm0 2.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5Z"/></svg>';
 
 let tooltipAnchor = null;
 let tooltipShowTimerId = null;
@@ -2588,7 +2589,6 @@ function renderCards(renderContext) {
     const iconPlay = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
     const iconPause = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zm6 0h4v14h-4z"/></svg>';
     const iconRunNow = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>';
-    const iconBaseline = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 2h2v3.06A7.002 7.002 0 0 1 18.94 11H22v2h-3.06A7.002 7.002 0 0 1 13 18.94V22h-2v-3.06A7.002 7.002 0 0 1 5.06 13H2v-2h3.06A7.002 7.002 0 0 1 11 5.06V2Zm1 5a5 5 0 1 0 0 10 5 5 0 0 0 0-10Zm0 2.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5Z"/></svg>';
     const iconTrash = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v9h-2V9zm4 0h2v9h-2V9zM7 9h2v9H7V9z"/></svg>';
 
     toggleButton.classList.toggle("is-running", tracker.running);
@@ -2620,7 +2620,7 @@ function renderCards(renderContext) {
 
     const isBaseCard = state.comparisonBaseUrl === tracker.url;
     if (setBaselineButton) {
-      setBaselineButton.innerHTML = iconBaseline;
+      setBaselineButton.innerHTML = ICON_BASELINE;
       setBaselineButton.classList.toggle("is-active", isBaseCard);
       setBaselineButton.setAttribute("aria-label", isBaseCard ? "Clear comparison baseline" : "Set as comparison baseline");
       setBaselineButton.dataset.tooltip = isBaseCard ? "Clear comparison baseline" : "Set as comparison baseline";
@@ -2793,6 +2793,12 @@ function renderComparisonTable(renderContext) {
 
     const urlCell = document.createElement("td");
     urlCell.className = "comparison-url-cell";
+
+    const urlContent = document.createElement("div");
+    urlContent.className = "comparison-url-content";
+
+    const urlText = document.createElement("div");
+    urlText.className = "comparison-url-text";
     if (rowData.label) {
       const labelBig = document.createElement("span");
       labelBig.className = "comparison-url-label";
@@ -2800,11 +2806,39 @@ function renderComparisonTable(renderContext) {
       const urlSmall = document.createElement("span");
       urlSmall.className = "comparison-url-small";
       urlSmall.textContent = rowData.url;
-      urlCell.append(labelBig, urlSmall);
+      urlText.append(labelBig, urlSmall);
     } else {
-      urlCell.classList.add("comparison-url-only");
-      urlCell.textContent = rowData.url;
+      const urlOnly = document.createElement("span");
+      urlOnly.className = "comparison-url-only";
+      urlOnly.textContent = rowData.url;
+      urlText.append(urlOnly);
     }
+
+    const isBaseRow = state.comparisonBaseUrl === rowData.url;
+    const tableBaselineButton = document.createElement("button");
+    tableBaselineButton.type = "button";
+    tableBaselineButton.className = "comparison-baseline-btn set-baseline icon-btn secondary";
+    tableBaselineButton.innerHTML = ICON_BASELINE;
+    tableBaselineButton.classList.toggle("is-active", isBaseRow);
+    tableBaselineButton.setAttribute(
+      "aria-label",
+      isBaseRow ? "Clear comparison baseline" : "Set as comparison baseline",
+    );
+    tableBaselineButton.dataset.tooltip = isBaseRow
+      ? "Clear comparison baseline"
+      : "Set as comparison baseline";
+    attachTooltipHandlers(tableBaselineButton);
+    tableBaselineButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      runWithViewTransition(() => {
+        state.comparisonBaseUrl = isBaseRow ? null : rowData.url;
+        persistState();
+        render();
+      });
+    });
+
+    urlContent.append(urlText, tableBaselineButton);
+    urlCell.append(urlContent);
     row.append(urlCell);
 
     const modeCell = document.createElement("td");

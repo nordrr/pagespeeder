@@ -1111,6 +1111,19 @@ th.sortable.sort-desc::after {
   min-width: 210px;
 }
 
+.comparison-url-content {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.comparison-url-text {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 .comparison-url-small {
   display: block;
   font-size: 0.68rem;
@@ -1128,9 +1141,24 @@ th.sortable.sort-desc::after {
 }
 
 .comparison-url-only {
+  display: block;
   font-size: 0.78rem;
   font-family: var(--font-sans);
   word-break: break-all;
+}
+
+.comparison-baseline-btn {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  border-radius: 6px;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.comparison-baseline-btn svg {
+  width: 13px;
+  height: 13px;
 }
 
 .run-detail-backdrop {
