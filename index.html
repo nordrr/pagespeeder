@@ -10,6 +10,24 @@
       href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;800&family=Roboto+Mono:wght@400;500;700;800&display=swap"
       rel="stylesheet"
     />
+    <script>
+      (() => {
+        try {
+          const raw = localStorage.getItem("pagespeed-tracker-state-v1");
+          const parsed = raw ? JSON.parse(raw) : null;
+          const mode = parsed && typeof parsed.themeMode === "string" ? parsed.themeMode : "auto";
+          const resolved = mode === "dark"
+            ? "dark"
+            : mode === "light"
+              ? "light"
+              : (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+          document.documentElement.dataset.theme = resolved;
+          document.documentElement.style.colorScheme = resolved;
+        } catch {
+          // Ignore storage parse issues and fall back to default light styles.
+        }
+      })();
+    </script>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -19,6 +37,14 @@
         <p>Track PageSpeed Insights over time, average results, and compare URLs.</p>
       </div>
       <div class="header-actions">
+        <label class="theme-control" for="theme-mode">
+          <span>Theme</span>
+          <select id="theme-mode" name="themeMode" aria-label="Theme mode">
+            <option value="auto">Auto</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </label>
         <button id="start-all" type="button">Start All</button>
         <button id="stop-all" type="button" class="secondary">Stop All</button>
       </div>

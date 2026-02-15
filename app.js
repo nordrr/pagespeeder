@@ -1,6 +1,7 @@
 const PSI_ENDPOINT = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed";
 const STRATEGIES = ["mobile", "desktop"];
 const STORAGE_KEY = "pagespeed-tracker-state-v1";
+const THEME_MODES = new Set(["auto", "light", "dark"]);
 const SCORING_MODEL_VERSION = "v10";
 const TARGET_CI_HALF_WIDTH_POINTS = 2;
 const SECONDARY_CI_HALF_WIDTH_POINTS = 1;
@@ -68,6 +69,7 @@ const state = {
     direction: null,
   },
   runDetail: null,
+  themeMode: "auto",
 };
 
 const settingsForm = document.getElementById("settings-form");
@@ -82,6 +84,7 @@ const comparisonBody = document.getElementById("comparison-body");
 const startAllButton = document.getElementById("start-all");
 const stopAllButton = document.getElementById("stop-all");
 const clearAllButton = document.getElementById("clear-all");
+const themeModeSelect = document.getElementById("theme-mode");
 const runDetailBackdrop = document.getElementById("run-detail-backdrop");
 const runDetailPanel = document.getElementById("run-detail-panel");
 const runDetailCloseButton = document.getElementById("run-detail-close");
@@ -95,10 +98,31 @@ let tooltipAnchor = null;
 let tooltipShowTimerId = null;
 let tooltipHideTimerId = null;
 let headerSyncRafId = null;
+const systemThemeQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
 if (runDetailBackdrop) {
   // Keep mounted so CSS opacity/visibility transitions can animate.
   runDetailBackdrop.hidden = false;
+}
+
+function getResolvedTheme(mode) {
+  if (mode === "dark") {
+    return "dark";
+  }
+  if (mode === "light") {
+    return "light";
+  }
+  return systemThemeQuery.matches ? "dark" : "light";
+}
+
+function applyThemeMode() {
+  const mode = THEME_MODES.has(state.themeMode) ? state.themeMode : "auto";
+  const resolvedTheme = getResolvedTheme(mode);
+  document.documentElement.dataset.theme = resolvedTheme;
+  document.documentElement.style.colorScheme = resolvedTheme;
+  if (themeModeSelect && themeModeSelect.value !== mode) {
+    themeModeSelect.value = mode;
+  }
 }
 
 runDetailCloseButton?.addEventListener("click", () => {
@@ -115,6 +139,31 @@ document.addEventListener("keydown", (event) => {
 window.addEventListener("scroll", () => hideTooltip(), true);
 window.addEventListener("resize", () => hideTooltip());
 window.addEventListener("resize", () => scheduleHeaderHeightSync());
+if (typeof systemThemeQuery.addEventListener === "function") {
+  systemThemeQuery.addEventListener("change", () => {
+    if (state.themeMode === "auto") {
+      applyThemeMode();
+      render();
+    }
+  });
+} else if (typeof systemThemeQuery.addListener === "function") {
+  systemThemeQuery.addListener(() => {
+    if (state.themeMode === "auto") {
+      applyThemeMode();
+      render();
+    }
+  });
+}
+themeModeSelect?.addEventListener("change", () => {
+  const requestedMode = themeModeSelect.value;
+  if (!THEME_MODES.has(requestedMode)) {
+    return;
+  }
+  state.themeMode = requestedMode;
+  applyThemeMode();
+  persistState();
+  render();
+});
 
 for (const header of sortableHeaders) {
   header.tabIndex = 0;
@@ -844,14 +893,80 @@ function mixColor(from, to, ratio) {
   return `rgb(${red} ${green} ${blue})`;
 }
 
+function parseColorToRgbArray(color) {
+  if (!color || typeof color !== "string") {
+    return null;
+  }
+
+  const trimmed = color.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (trimmed.startsWith("#")) {
+    const hex = trimmed.slice(1);
+    if (hex.length === 3) {
+      const r = Number.parseInt(hex[0] + hex[0], 16);
+      const g = Number.parseInt(hex[1] + hex[1], 16);
+      const b = Number.parseInt(hex[2] + hex[2], 16);
+      if ([r, g, b].every(Number.isFinite)) {
+        return [r, g, b];
+      }
+      return null;
+    }
+    if (hex.length === 6) {
+      const r = Number.parseInt(hex.slice(0, 2), 16);
+      const g = Number.parseInt(hex.slice(2, 4), 16);
+      const b = Number.parseInt(hex.slice(4, 6), 16);
+      if ([r, g, b].every(Number.isFinite)) {
+        return [r, g, b];
+      }
+      return null;
+    }
+    return null;
+  }
+
+  if (trimmed.startsWith("rgb")) {
+    const components = trimmed.match(/[\d.]+/g);
+    if (!components || components.length < 3) {
+      return null;
+    }
+    const r = Number.parseFloat(components[0]);
+    const g = Number.parseFloat(components[1]);
+    const b = Number.parseFloat(components[2]);
+    if ([r, g, b].every(Number.isFinite)) {
+      return [Math.round(r), Math.round(g), Math.round(b)];
+    }
+  }
+
+  return null;
+}
+
+function getPercentilePalette() {
+  const isDark = document.documentElement.dataset.theme === "dark";
+  const themeBgRaw = getComputedStyle(document.documentElement).getPropertyValue("--bg");
+  const themeBg = parseColorToRgbArray(themeBgRaw);
+
+  if (isDark) {
+    return {
+      low: [186, 86, 86],
+      mid: themeBg || [11, 18, 32],
+      high: [79, 165, 126],
+    };
+  }
+  return {
+    low: [223, 122, 114],
+    mid: themeBg || [242, 244, 248],
+    high: [99, 188, 147],
+  };
+}
+
 function percentileColor(percentile) {
   if (!Number.isFinite(percentile)) {
     return "";
   }
 
-  const low = [223, 122, 114];
-  const mid = [232, 226, 222];
-  const high = [99, 188, 147];
+  const { low, mid, high } = getPercentilePalette();
   const p = Math.max(0, Math.min(100, percentile));
 
   if (p <= 50) {
@@ -1154,8 +1269,8 @@ function getPendingStatus(tracker, rowData, mode) {
 
 function renderPendingCell(cell, status) {
   cell.className = "score-cell-pending";
-  cell.style.backgroundColor = "#edf0f5";
-  cell.style.color = "#4b5563";
+  cell.style.backgroundColor = "";
+  cell.style.color = "";
   cell.innerHTML = "";
 
   const wrapper = document.createElement("span");
@@ -1873,6 +1988,7 @@ function persistState() {
     const payload = {
       apiKey: state.apiKey,
       pollIntervalSec: state.pollIntervalSec,
+      themeMode: state.themeMode,
       trackers: Array.from(state.trackers.values()).map(serializeTracker),
       sort: state.sort,
     };
@@ -1901,6 +2017,10 @@ function hydrateState() {
     if (Number.isFinite(parsed.pollIntervalSec) && parsed.pollIntervalSec >= 60) {
       state.pollIntervalSec = parsed.pollIntervalSec;
       pollIntervalInput.value = String(parsed.pollIntervalSec);
+    }
+
+    if (typeof parsed.themeMode === "string" && THEME_MODES.has(parsed.themeMode)) {
+      state.themeMode = parsed.themeMode;
     }
 
     if (parsed.sort && typeof parsed.sort === "object") {
@@ -1948,6 +2068,7 @@ function hydrateState() {
 }
 
 hydrateState();
+applyThemeMode();
 for (const tracker of state.trackers.values()) {
   if (tracker.running) {
     startTracker(tracker);
