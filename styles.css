@@ -26,6 +26,9 @@
   --button-danger-border: #f0cdcd;
   --button-danger-hover-bg: #ffe4e4;
   --button-danger-hover-border: #e7bcbc;
+  --button-danger-confirm-bg: #b91c1c;
+  --button-danger-confirm-border: #991b1b;
+  --button-danger-confirm-hover-bg: #991b1b;
   --button-hover-shadow: 0 4px 10px rgba(15, 23, 42, 0.18);
   --toggle-running-bg: #0d8a49;
   --toggle-running-hover-bg: #0a733c;
@@ -78,6 +81,9 @@
   --button-danger-border: #7f1d1d;
   --button-danger-hover-bg: #4b2328;
   --button-danger-hover-border: #991b1b;
+  --button-danger-confirm-bg: #b91c1c;
+  --button-danger-confirm-border: #ef4444;
+  --button-danger-confirm-hover-bg: #991b1b;
   --button-hover-shadow: 0 4px 12px rgba(2, 6, 23, 0.55);
   --toggle-running-bg: #15803d;
   --toggle-running-hover-bg: #166534;
@@ -273,7 +279,7 @@ button.secondary:not(.url-card-title):not(.run-score-button):not(.inline-link-bt
   border-color: var(--button-secondary-hover-border);
 }
 
-button.danger:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(.drag-handle):not(:disabled):hover {
+button.danger:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(.drag-handle):not(.remove-confirm):not(:disabled):hover {
   background: var(--button-danger-hover-bg);
   border-color: var(--button-danger-hover-border);
 }
@@ -560,6 +566,24 @@ button.danger:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):
   width: 14px;
   height: 14px;
   fill: currentColor;
+}
+
+.icon-btn.remove-confirm {
+  background: var(--button-danger-confirm-bg);
+  border-color: var(--button-danger-confirm-border);
+  color: #ffffff;
+}
+
+.icon-btn.remove-confirm:hover {
+  background: var(--button-danger-confirm-hover-bg);
+  border-color: var(--button-danger-confirm-hover-bg);
+  color: #ffffff;
+}
+
+.icon-btn.remove-confirm:disabled {
+  opacity: 1;
+  cursor: not-allowed;
+  filter: grayscale(1);
 }
 
 .toggle-run.is-running {

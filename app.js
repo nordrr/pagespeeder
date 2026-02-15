@@ -97,6 +97,8 @@ const uiTooltip = document.getElementById("ui-tooltip");
 const SORTABLE_KEYS = new Set(["url", "mode", "avgScore", "confidence", "samples", "fcp", "si", "lcp", "tbt", "cls"]);
 const TOOLTIP_DELAY_MS = 250;
 const TOOLTIP_HIDE_GRACE_MS = 120;
+const REMOVE_CONFIRM_LOCKOUT_MS = 1000;
+const REMOVE_CONFIRM_ARM_TTL_MS = 10000;
 
 let tooltipAnchor = null;
 let tooltipShowTimerId = null;
@@ -170,6 +172,19 @@ themeModeSelect?.addEventListener("change", () => {
   render();
 });
 
+document.addEventListener("pointerdown", (event) => {
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return;
+  }
+  const removeButton = target.closest(".remove");
+  const removeCard = removeButton?.closest(".url-card[data-url]");
+  const keepArmedUrl = removeCard?.dataset.url || null;
+  if (disarmAllTrackerRemovals(keepArmedUrl)) {
+    render();
+  }
+}, true);
+
 for (const header of sortableHeaders) {
   header.tabIndex = 0;
   header.addEventListener("click", () => {
@@ -207,15 +222,17 @@ addUrlForm.addEventListener("submit", (event) => {
     return;
   }
 
-  const tracker = createTracker(cleanedUrl);
-  state.trackers.set(cleanedUrl, tracker);
-  state.trackerOrder.push(cleanedUrl);
-  startTracker(tracker, true);
-  persistState();
+  runWithViewTransition(() => {
+    const tracker = createTracker(cleanedUrl);
+    state.trackers.set(cleanedUrl, tracker);
+    state.trackerOrder.push(cleanedUrl);
+    startTracker(tracker, true);
+    persistState();
 
-  urlInput.value = "";
-  updateShopifyPbSuggestion();
-  render();
+    urlInput.value = "";
+    updateShopifyPbSuggestion();
+    render();
+  });
 });
 
 urlInput?.addEventListener("input", () => {
@@ -316,6 +333,10 @@ function createTracker(url) {
     lastError: "",
     phase: "paused",
     activeStrategy: null,
+    removeConfirmArmed: false,
+    removeConfirmReadyAt: 0,
+    removeConfirmLockTimerId: null,
+    removeConfirmExpireTimerId: null,
   };
 }
 
@@ -403,14 +424,79 @@ function removeTracker(url) {
     return;
   }
 
-  stopTracker(tracker);
-  state.trackers.delete(url);
-  state.trackerOrder = state.trackerOrder.filter((entryUrl) => entryUrl !== url);
-  if (state.runDetail?.url === url) {
-    closeRunDetailPanel();
+  runWithViewTransition(() => {
+    disarmTrackerRemoval(tracker);
+    stopTracker(tracker);
+    state.trackers.delete(url);
+    state.trackerOrder = state.trackerOrder.filter((entryUrl) => entryUrl !== url);
+    if (state.runDetail?.url === url) {
+      closeRunDetailPanel();
+    }
+    persistState();
+    render();
+  });
+}
+
+function disarmTrackerRemoval(tracker, shouldRender = false) {
+  if (!tracker) {
+    return;
   }
-  persistState();
-  render();
+
+  if (tracker.removeConfirmLockTimerId) {
+    clearTimeout(tracker.removeConfirmLockTimerId);
+    tracker.removeConfirmLockTimerId = null;
+  }
+  if (tracker.removeConfirmExpireTimerId) {
+    clearTimeout(tracker.removeConfirmExpireTimerId);
+    tracker.removeConfirmExpireTimerId = null;
+  }
+
+  tracker.removeConfirmArmed = false;
+  tracker.removeConfirmReadyAt = 0;
+  if (shouldRender) {
+    render();
+  }
+}
+
+function disarmAllTrackerRemovals(exceptUrl = null) {
+  let changed = false;
+  for (const tracker of state.trackers.values()) {
+    if (exceptUrl && tracker.url === exceptUrl) {
+      continue;
+    }
+    if (!tracker.removeConfirmArmed) {
+      continue;
+    }
+    disarmTrackerRemoval(tracker);
+    changed = true;
+  }
+  return changed;
+}
+
+function armTrackerRemoval(tracker) {
+  if (!tracker) {
+    return;
+  }
+
+  disarmAllTrackerRemovals(tracker.url);
+  disarmTrackerRemoval(tracker);
+  tracker.removeConfirmArmed = true;
+  tracker.removeConfirmReadyAt = Date.now() + REMOVE_CONFIRM_LOCKOUT_MS;
+
+  tracker.removeConfirmLockTimerId = setTimeout(() => {
+    tracker.removeConfirmLockTimerId = null;
+    if (!state.trackers.has(tracker.url) || !tracker.removeConfirmArmed) {
+      return;
+    }
+    render();
+  }, REMOVE_CONFIRM_LOCKOUT_MS);
+
+  tracker.removeConfirmExpireTimerId = setTimeout(() => {
+    if (!state.trackers.has(tracker.url) || !tracker.removeConfirmArmed) {
+      return;
+    }
+    disarmTrackerRemoval(tracker, true);
+  }, REMOVE_CONFIRM_ARM_TTL_MS);
 }
 
 function getOrderedTrackerUrls() {
@@ -448,6 +534,12 @@ function getOrderedTrackers() {
 function clearDragCardClasses() {
   for (const card of urlCardsContainer.querySelectorAll(".url-card")) {
     card.classList.remove("drop-target", "is-dragging", "dragging-active");
+  }
+}
+
+function clearDropTargets() {
+  for (const card of urlCardsContainer.querySelectorAll(".url-card.drop-target")) {
+    card.classList.remove("drop-target");
   }
 }
 
@@ -517,6 +609,10 @@ function positionTooltip() {
   if (!uiTooltip || !tooltipAnchor) {
     return;
   }
+  if (!tooltipAnchor.isConnected) {
+    hideTooltip();
+    return;
+  }
 
   const rect = tooltipAnchor.getBoundingClientRect();
   const spacing = 8;
@@ -541,7 +637,7 @@ function positionTooltip() {
 }
 
 function showTooltipNow(text, anchor) {
-  if (!uiTooltip || !text || !anchor) {
+  if (!uiTooltip || !text || !anchor || !anchor.isConnected) {
     return;
   }
   uiTooltip.textContent = text;
@@ -1979,16 +2075,31 @@ function renderCards(renderContext) {
 
     removeButton.innerHTML = iconTrash;
     removeButton.setAttribute("aria-label", "Remove");
-    removeButton.dataset.tooltip = "Remove";
+    const removeLocked = tracker.removeConfirmArmed && Date.now() < tracker.removeConfirmReadyAt;
+    removeButton.classList.toggle("remove-confirm", tracker.removeConfirmArmed);
+    removeButton.disabled = removeLocked;
+    removeButton.dataset.tooltip = tracker.removeConfirmArmed ? "Really remove?" : "Remove";
+    removeButton.setAttribute("aria-label", tracker.removeConfirmArmed ? "Really remove?" : "Remove");
     attachTooltipHandlers(removeButton);
-    removeButton.addEventListener("click", () => removeTracker(tracker.url));
+    removeButton.addEventListener("click", () => {
+      if (!tracker.removeConfirmArmed) {
+        hideTooltip();
+        armTrackerRemoval(tracker);
+        render();
+        return;
+      }
+      if (Date.now() < tracker.removeConfirmReadyAt) {
+        return;
+      }
+      removeTracker(tracker.url);
+    });
 
     card.addEventListener("dragover", (event) => {
       if (!draggedTrackerUrl || draggedTrackerUrl === tracker.url) {
         return;
       }
       event.preventDefault();
-      clearDragCardClasses();
+      clearDropTargets();
       card.classList.add("drop-target");
     });
 
@@ -1997,7 +2108,7 @@ function renderCards(renderContext) {
         return;
       }
       event.preventDefault();
-      clearDragCardClasses();
+      clearDropTargets();
       card.classList.add("drop-target");
     });
 
