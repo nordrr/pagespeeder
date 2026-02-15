@@ -448,9 +448,16 @@ button.danger:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):
 
 .url-identity {
   display: grid;
-  gap: 5px;
+  grid-template-rows: minmax(0, 1fr) auto;
+  row-gap: 5px;
   flex: 1 1 220px;
   min-width: 0;
+}
+
+.title-row,
+.url-label-input {
+  grid-row: 1;
+  align-self: start;
 }
 
 .url-card-title {
@@ -544,7 +551,9 @@ button.danger:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):
 }
 
 .url-card-meta {
-  margin: 4px 0 0;
+  margin: 0;
+  grid-row: 2;
+  align-self: end;
   font-size: 0.83rem;
   color: var(--muted);
 }

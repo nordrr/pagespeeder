@@ -1998,9 +1998,9 @@ function renderRunDetailPanel() {
 
 function syncUrlCardHeaderHeights() {
   const headers = Array.from(urlCardsContainer.querySelectorAll(".url-card > header"));
-  const titles = Array.from(urlCardsContainer.querySelectorAll(".url-card-title"));
+  const identities = Array.from(urlCardsContainer.querySelectorAll(".url-identity"));
   const cards = Array.from(urlCardsContainer.querySelectorAll(".url-card[data-url]"));
-  if (!titles.length) {
+  if (!identities.length) {
     return;
   }
 
@@ -2008,8 +2008,8 @@ function syncUrlCardHeaderHeights() {
   for (const header of headers) {
     header.style.minHeight = "";
   }
-  for (const title of titles) {
-    title.style.minHeight = "";
+  for (const identity of identities) {
+    identity.style.minHeight = "";
   }
 
   const isMobileLayout = window.matchMedia("(max-width: 720px)").matches;
@@ -2029,17 +2029,17 @@ function syncUrlCardHeaderHeights() {
     return;
   }
 
-  const visibleTitles = titles.filter((title) => title.offsetParent !== null);
-  if (!visibleTitles.length) {
+  const visibleIdentities = identities.filter((identity) => identity.offsetParent !== null);
+  if (!visibleIdentities.length) {
     return;
   }
 
   const maxHeight = Math.max(
-    ...visibleTitles.map((title) => Math.ceil(title.getBoundingClientRect().height)),
+    ...visibleIdentities.map((identity) => Math.ceil(identity.getBoundingClientRect().height)),
   );
 
-  for (const title of visibleTitles) {
-    title.style.minHeight = `${maxHeight}px`;
+  for (const identity of visibleIdentities) {
+    identity.style.minHeight = `${maxHeight}px`;
   }
 }
 
