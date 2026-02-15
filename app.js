@@ -506,7 +506,10 @@ async function runCycle(tracker) {
   const strategyRuns = cycleStrategies.map((strategy) => (async () => {
     try {
       const sample = await fetchPsiSample(tracker.url, strategy, state.apiKey);
-      tracker.history[strategy].push(sample);
+      const previousSample = tracker.history[strategy].at(-1) || null;
+      if (!isDuplicateSample(previousSample, sample)) {
+        tracker.history[strategy].push(sample);
+      }
       tracker.lastError = "";
       persistState();
     } catch (error) {
@@ -561,6 +564,7 @@ async function fetchPsiSample(url, strategy, apiKey) {
 
   const perfScore = payload?.lighthouseResult?.categories?.performance?.score;
   const audits = payload?.lighthouseResult?.audits;
+  const lighthouseFetchTime = payload?.lighthouseResult?.fetchTime;
 
   if (typeof perfScore !== "number" || !audits) {
     throw new Error("Unexpected API response shape.");
@@ -582,9 +586,43 @@ async function fetchPsiSample(url, strategy, apiKey) {
 
   return {
     timestamp: Date.now(),
+    lighthouseFetchTime: typeof lighthouseFetchTime === "string" ? lighthouseFetchTime : null,
     performanceScore: perfScore * 100,
     metrics,
   };
+}
+
+function sampleFingerprint(sample) {
+  if (!sample || !sample.metrics || !Number.isFinite(sample.performanceScore)) {
+    return "";
+  }
+
+  const parts = [String(sample.performanceScore)];
+  for (const metric of METRICS) {
+    const metricData = sample.metrics[metric.key];
+    if (!metricData) {
+      return "";
+    }
+    parts.push(String(metricData.value));
+    parts.push(String(metricData.score));
+  }
+  return parts.join("|");
+}
+
+function isDuplicateSample(previousSample, nextSample) {
+  if (!previousSample || !nextSample) {
+    return false;
+  }
+
+  if (
+    previousSample.lighthouseFetchTime &&
+    nextSample.lighthouseFetchTime &&
+    previousSample.lighthouseFetchTime === nextSample.lighthouseFetchTime
+  ) {
+    return true;
+  }
+
+  return sampleFingerprint(previousSample) === sampleFingerprint(nextSample);
 }
 
 function summarize(samples) {
