@@ -772,7 +772,7 @@ html {
   border-radius: 8px;
   font-size: 0.68rem;
   color: var(--delta-pill-text);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   background: var(--delta-pill-bg);
   margin-top: 1px;
   white-space: normal;
@@ -865,6 +865,7 @@ html {
   font-size: 0.62rem;
   max-width: 100%;
   color: var(--delta-pill-text);
+  font-family: var(--font-sans);
   background: var(--delta-pill-bg);
   border-radius: 8px;
   padding: 1px 5px;

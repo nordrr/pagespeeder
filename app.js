@@ -1216,10 +1216,10 @@ function formatDeltaPointsAndPercent(deltaPoints, baselinePoints) {
   }
   const pointsLabel = `${formatSignedNumber(deltaPoints, 1)} pts`;
   if (!Number.isFinite(baselinePoints) || Math.abs(baselinePoints) < 0.000001) {
-    return `${pointsLabel} / --%`;
+    return `${pointsLabel} (--%)`;
   }
   const deltaPercent = (deltaPoints / baselinePoints) * 100;
-  return `${pointsLabel} / ${formatSignedNumber(deltaPercent, 1)}%`;
+  return `${pointsLabel} (${formatSignedNumber(deltaPercent, 1)}%)`;
 }
 
 function contributionPointsForDisplay(strategy, metricKey, value) {
