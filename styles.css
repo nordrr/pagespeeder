@@ -19,9 +19,14 @@
   --button-secondary-bg: #eceff3;
   --button-secondary-text: #4b5563;
   --button-secondary-border: #d1d5db;
+  --button-secondary-hover-bg: #e2e8f0;
+  --button-secondary-hover-border: #b9c3d1;
   --button-danger-bg: #fff0f0;
   --button-danger-text: #ad1e1e;
   --button-danger-border: #f0cdcd;
+  --button-danger-hover-bg: #ffe4e4;
+  --button-danger-hover-border: #e7bcbc;
+  --button-hover-shadow: 0 4px 10px rgba(15, 23, 42, 0.18);
   --toggle-running-bg: #0d8a49;
   --toggle-running-hover-bg: #0a733c;
   --toggle-paused-bg: #edf1f5;
@@ -36,6 +41,7 @@
   --font-sans: "Roboto", "Segoe UI", sans-serif;
   --font-mono: "Roboto Mono", "SFMono-Regular", Menlo, monospace;
   --accent: #115cce;
+  --accent-hover: #0f52b8;
   --danger: #ad1e1e;
   --shadow: 0 8px 22px rgba(21, 34, 56, 0.08);
   --panel-ease: cubic-bezier(0.43, 0.54, 0, 0.97);
@@ -65,9 +71,14 @@
   --button-secondary-bg: #1f2937;
   --button-secondary-text: #d1d5db;
   --button-secondary-border: #475569;
+  --button-secondary-hover-bg: #334155;
+  --button-secondary-hover-border: #64748b;
   --button-danger-bg: #3b1f23;
   --button-danger-text: #fca5a5;
   --button-danger-border: #7f1d1d;
+  --button-danger-hover-bg: #4b2328;
+  --button-danger-hover-border: #991b1b;
+  --button-hover-shadow: 0 4px 12px rgba(2, 6, 23, 0.55);
   --toggle-running-bg: #15803d;
   --toggle-running-hover-bg: #166534;
   --toggle-paused-bg: #1e293b;
@@ -80,6 +91,7 @@
   --tooltip-text: #e5e7eb;
   --comparison-cell-text: #e5e7eb;
   --accent: #3b82f6;
+  --accent-hover: #2563eb;
   --danger: #f87171;
   --shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
 }
@@ -205,6 +217,7 @@ button {
   color: #fff;
   cursor: pointer;
   font-weight: 600;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
 }
 
 button.secondary {
@@ -222,6 +235,30 @@ button.danger {
 button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+button:not(.url-card-title):not(.run-score-button):not(:disabled):hover {
+  box-shadow: var(--button-hover-shadow);
+  transform: translateY(-1px);
+}
+
+button:not(.url-card-title):not(.run-score-button):not(:disabled):active {
+  transform: translateY(0);
+}
+
+button:not(.url-card-title):not(.run-score-button):not(.secondary):not(.danger):not(:disabled):hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+button.secondary:not(.url-card-title):not(.run-score-button):not(:disabled):hover {
+  background: var(--button-secondary-hover-bg);
+  border-color: var(--button-secondary-hover-border);
+}
+
+button.danger:not(.url-card-title):not(.run-score-button):not(:disabled):hover {
+  background: var(--button-danger-hover-bg);
+  border-color: var(--button-danger-hover-border);
 }
 
 .hint {
@@ -419,6 +456,10 @@ button:disabled {
 .toggle-run.is-paused:hover {
   background: var(--toggle-paused-hover-bg);
   border-color: var(--toggle-paused-hover-border);
+}
+
+:root[data-theme="light"] .toggle-run.is-paused:hover {
+  color: #ffffff;
 }
 
 .url-card-content {
