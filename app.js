@@ -1295,6 +1295,9 @@ function renderPendingCell(cell, status) {
 }
 
 function renderScoreCell(cell, sample, mode, renderContext, tracker, rowData) {
+  cell.onclick = null;
+  cell.style.cursor = "";
+
   if (!sample) {
     const status = getPendingStatus(tracker, rowData, mode);
     if (status) {
@@ -1315,15 +1318,19 @@ function renderScoreCell(cell, sample, mode, renderContext, tracker, rowData) {
   cell.className = mode === "mobile" ? "score-cell-mobile" : "score-cell-desktop";
   cell.style.backgroundColor = background;
   cell.style.color = textColorForBackground(background);
+  cell.style.cursor = "pointer";
   cell.innerHTML = "";
+
+  const openDetail = () => {
+    openRunDetailPanel(tracker, mode, sample, rowData.runNumber);
+  };
+  cell.addEventListener("click", openDetail);
 
   const button = document.createElement("button");
   button.type = "button";
   button.className = "run-score-button";
   button.textContent = score.toFixed(0);
-  button.addEventListener("click", () => {
-    openRunDetailPanel(tracker, mode, sample, rowData.runNumber);
-  });
+  button.tabIndex = -1;
 
   cell.append(button);
 }
