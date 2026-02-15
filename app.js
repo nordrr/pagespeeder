@@ -1202,10 +1202,12 @@ function renderSummaryTile(tile, summary, mode, renderContext) {
     : Math.max(2, Math.ceil(((1.96 * summary.scoreStdDev) / SECONDARY_CI_HALF_WIDTH_POINTS) ** 2));
   const moreRuns = requiredRuns === null ? null : Math.max(0, requiredRuns - summary.samples);
   const moreRunsTight = requiredRunsTight === null ? null : Math.max(0, requiredRunsTight - summary.samples);
+  const moreRunsLabel = moreRuns === 0 ? "✅" : `+${moreRuns} more`;
+  const moreRunsTightLabel = moreRunsTight === 0 ? "✅" : `+${moreRunsTight} more`;
   const mainLine = `${formatConfidence(summary.ci95HalfWidth)} (${summary.samples} runs)`;
   const subLine = requiredRuns === null || requiredRunsTight === null
     ? "stat sig ±2: ~? runs\nstat sig ±1: ~? runs"
-    : `stat sig ±2: ~${requiredRuns} runs (+${moreRuns} more)\nstat sig ±1: ~${requiredRunsTight} runs (+${moreRunsTight} more)`;
+    : `stat sig ±2: ~${requiredRuns} runs (${moreRunsLabel})\nstat sig ±1: ~${requiredRunsTight} runs (${moreRunsTightLabel})`;
 
   metaNode.innerHTML = "";
   const main = document.createElement("span");
