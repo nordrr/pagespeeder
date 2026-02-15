@@ -142,9 +142,10 @@ button:disabled {
 
 .url-cards {
   margin-top: 12px;
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
   gap: 14px;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  justify-content: flex-start;
   align-items: stretch;
 }
 
@@ -154,10 +155,14 @@ button:disabled {
   padding: 12px;
   background: #fcfdff;
   overflow: hidden;
-  width: 100%;
+  flex: 1 1 280px;
+  width: min(100%, 450px);
   min-width: 0;
   max-width: 450px;
-  justify-self: stretch;
+}
+
+.url-cards > .placeholder {
+  width: 100%;
 }
 
 .url-card > header {
@@ -827,10 +832,11 @@ body.run-detail-open .run-detail-panel {
   }
 
   .url-cards {
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
   }
 
   .url-card {
+    flex-basis: 260px;
     max-width: 100%;
   }
 
@@ -881,10 +887,12 @@ body.run-detail-open .run-detail-panel {
   }
 
   .url-cards {
-    grid-template-columns: 1fr;
+    gap: 10px;
   }
 
   .url-card {
+    flex-basis: 100%;
+    width: 100%;
     max-width: 100%;
   }
 

@@ -1437,6 +1437,7 @@ function renderRunDetailPanel() {
 function syncUrlCardHeaderHeights() {
   const headers = Array.from(urlCardsContainer.querySelectorAll(".url-card > header"));
   const titles = Array.from(urlCardsContainer.querySelectorAll(".url-card-title"));
+  const cards = Array.from(urlCardsContainer.querySelectorAll(".url-card[data-url]"));
   if (!titles.length) {
     return;
   }
@@ -1454,9 +1455,15 @@ function syncUrlCardHeaderHeights() {
     return;
   }
 
-  const gridTemplate = getComputedStyle(urlCardsContainer).gridTemplateColumns;
-  const columnCount = gridTemplate === "none" ? 1 : gridTemplate.trim().split(/\s+/).length;
-  if (columnCount < 2) {
+  const visibleCards = cards.filter((card) => card.offsetParent !== null);
+  if (visibleCards.length < 2) {
+    return;
+  }
+  const firstRowTop = Math.round(visibleCards[0].getBoundingClientRect().top);
+  const hasMultiColumnRow = visibleCards
+    .slice(1)
+    .some((card) => Math.abs(Math.round(card.getBoundingClientRect().top) - firstRowTop) <= 1);
+  if (!hasMultiColumnRow) {
     return;
   }
 
