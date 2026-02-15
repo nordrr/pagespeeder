@@ -127,10 +127,22 @@
       <article class="url-card">
         <header>
           <div class="url-identity">
-            <button class="url-card-title" type="button" data-hint="Add a label">
-              <span class="url-label-line"></span>
-              <span class="url-title-url"></span>
-            </button>
+            <div class="title-row">
+              <button class="drag-handle" type="button" aria-label="Reorder URL" draggable="true">
+                <svg viewBox="0 0 16 16" aria-hidden="true">
+                  <circle cx="5" cy="3.5" r="1.1"></circle>
+                  <circle cx="11" cy="3.5" r="1.1"></circle>
+                  <circle cx="5" cy="8" r="1.1"></circle>
+                  <circle cx="11" cy="8" r="1.1"></circle>
+                  <circle cx="5" cy="12.5" r="1.1"></circle>
+                  <circle cx="11" cy="12.5" r="1.1"></circle>
+                </svg>
+              </button>
+              <button class="url-card-title" type="button" data-hint="Add a label">
+                <span class="url-label-line"></span>
+                <span class="url-title-url"></span>
+              </button>
+            </div>
             <input class="url-label-input" type="text" maxlength="80" placeholder="Add a label" />
             <p class="url-card-meta"></p>
           </div>

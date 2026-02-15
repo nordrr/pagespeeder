@@ -5,6 +5,7 @@ const THEME_MODES = new Set(["auto", "light", "dark"]);
 const SCORING_MODEL_VERSION = "v10";
 const TARGET_CI_HALF_WIDTH_POINTS = 2;
 const SECONDARY_CI_HALF_WIDTH_POINTS = 1;
+const MIN_STAT_SIG_SAMPLES = 10;
 const LH_V10_CURVES = {
   mobile: {
     fcp: { weight: 0.10, median: 3000, p10: 1800 },
@@ -64,6 +65,7 @@ const state = {
   apiKey: "",
   pollIntervalSec: 60,
   trackers: new Map(),
+  trackerOrder: [],
   sort: {
     key: null,
     direction: null,
@@ -100,6 +102,7 @@ let tooltipAnchor = null;
 let tooltipShowTimerId = null;
 let tooltipHideTimerId = null;
 let headerSyncRafId = null;
+let draggedTrackerUrl = null;
 const systemThemeQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
 if (runDetailBackdrop) {
@@ -206,6 +209,7 @@ addUrlForm.addEventListener("submit", (event) => {
 
   const tracker = createTracker(cleanedUrl);
   state.trackers.set(cleanedUrl, tracker);
+  state.trackerOrder.push(cleanedUrl);
   startTracker(tracker, true);
   persistState();
 
@@ -261,6 +265,7 @@ clearAllButton.addEventListener("click", () => {
   }
 
   state.trackers.clear();
+  state.trackerOrder = [];
   closeRunDetailPanel();
   persistState();
   render();
@@ -400,11 +405,91 @@ function removeTracker(url) {
 
   stopTracker(tracker);
   state.trackers.delete(url);
+  state.trackerOrder = state.trackerOrder.filter((entryUrl) => entryUrl !== url);
   if (state.runDetail?.url === url) {
     closeRunDetailPanel();
   }
   persistState();
   render();
+}
+
+function getOrderedTrackerUrls() {
+  const known = new Set(state.trackers.keys());
+  const ordered = [];
+
+  for (const url of state.trackerOrder) {
+    if (!known.has(url)) {
+      continue;
+    }
+    ordered.push(url);
+    known.delete(url);
+  }
+
+  for (const url of state.trackers.keys()) {
+    if (known.has(url)) {
+      ordered.push(url);
+    }
+  }
+
+  return ordered;
+}
+
+function normalizeTrackerOrder() {
+  state.trackerOrder = getOrderedTrackerUrls();
+}
+
+function getOrderedTrackers() {
+  normalizeTrackerOrder();
+  return state.trackerOrder
+    .map((url) => state.trackers.get(url))
+    .filter(Boolean);
+}
+
+function clearDragCardClasses() {
+  for (const card of urlCardsContainer.querySelectorAll(".url-card")) {
+    card.classList.remove("drop-target", "is-dragging", "dragging-active");
+  }
+}
+
+function runWithViewTransition(update) {
+  if (
+    typeof document.startViewTransition === "function" &&
+    !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  ) {
+    document.startViewTransition(() => {
+      update();
+    });
+    return;
+  }
+  update();
+}
+
+function viewTransitionNameForUrl(url) {
+  let hash = 0;
+  for (let i = 0; i < url.length; i += 1) {
+    hash = ((hash << 5) - hash + url.charCodeAt(i)) | 0;
+  }
+  return `tracker-card-${Math.abs(hash)}`;
+}
+
+function reorderTracker(draggedUrl, targetUrl) {
+  if (!draggedUrl || !targetUrl || draggedUrl === targetUrl) {
+    return;
+  }
+
+  const order = getOrderedTrackerUrls();
+  const draggedIndex = order.indexOf(draggedUrl);
+  const targetIndex = order.indexOf(targetUrl);
+  if (draggedIndex === -1 || targetIndex === -1) {
+    return;
+  }
+  [order[draggedIndex], order[targetIndex]] = [order[targetIndex], order[draggedIndex]];
+
+  runWithViewTransition(() => {
+    state.trackerOrder = order;
+    persistState();
+    render();
+  });
 }
 
 function hideTooltip() {
@@ -1443,10 +1528,10 @@ function renderSummaryTile(tile, summary, mode, renderContext) {
   scoreNode.textContent = summary.avgScore.toFixed(1);
   const requiredRuns = summary.samples < 2
     ? null
-    : Math.max(2, Math.ceil(((1.96 * summary.scoreStdDev) / TARGET_CI_HALF_WIDTH_POINTS) ** 2));
+    : Math.max(MIN_STAT_SIG_SAMPLES, Math.ceil(((1.96 * summary.scoreStdDev) / TARGET_CI_HALF_WIDTH_POINTS) ** 2));
   const requiredRunsTight = summary.samples < 2
     ? null
-    : Math.max(2, Math.ceil(((1.96 * summary.scoreStdDev) / SECONDARY_CI_HALF_WIDTH_POINTS) ** 2));
+    : Math.max(MIN_STAT_SIG_SAMPLES, Math.ceil(((1.96 * summary.scoreStdDev) / SECONDARY_CI_HALF_WIDTH_POINTS) ** 2));
   const moreRuns = requiredRuns === null ? null : Math.max(0, requiredRuns - summary.samples);
   const moreRunsTight = requiredRunsTight === null ? null : Math.max(0, requiredRunsTight - summary.samples);
   const moreRunsLabel = moreRuns === 0 ? "✅" : `+${moreRuns} more`;
@@ -1763,11 +1848,13 @@ function renderCards(renderContext) {
     return;
   }
 
-  for (const tracker of state.trackers.values()) {
+  for (const tracker of getOrderedTrackers()) {
     const card = urlCardTemplate.content.firstElementChild.cloneNode(true);
     card.dataset.url = tracker.url;
+    card.style.viewTransitionName = viewTransitionNameForUrl(tracker.url);
 
     const title = card.querySelector(".url-card-title");
+    const dragHandle = card.querySelector(".drag-handle");
     const labelLine = card.querySelector(".url-label-line");
     const urlLine = card.querySelector(".url-title-url");
     const labelInput = card.querySelector(".url-label-input");
@@ -1794,6 +1881,33 @@ function renderCards(renderContext) {
       labelInput.focus();
       labelInput.select();
     });
+
+    if (dragHandle) {
+      dragHandle.dataset.tooltip = "Drag to reorder";
+      attachTooltipHandlers(dragHandle);
+      dragHandle.addEventListener("pointerdown", (event) => {
+        event.stopPropagation();
+      });
+      dragHandle.addEventListener("mousedown", (event) => {
+        event.stopPropagation();
+      });
+      dragHandle.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      });
+      dragHandle.addEventListener("dragstart", (event) => {
+        draggedTrackerUrl = tracker.url;
+        card.classList.add("is-dragging", "dragging-active");
+        if (event.dataTransfer) {
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData("text/plain", tracker.url);
+        }
+      });
+      dragHandle.addEventListener("dragend", () => {
+        draggedTrackerUrl = null;
+        clearDragCardClasses();
+      });
+    }
 
     let didCancelLabelEdit = false;
     const commitLabel = () => {
@@ -1864,6 +1978,43 @@ function renderCards(renderContext) {
     removeButton.dataset.tooltip = "Remove";
     attachTooltipHandlers(removeButton);
     removeButton.addEventListener("click", () => removeTracker(tracker.url));
+
+    card.addEventListener("dragover", (event) => {
+      if (!draggedTrackerUrl || draggedTrackerUrl === tracker.url) {
+        return;
+      }
+      event.preventDefault();
+      clearDragCardClasses();
+      card.classList.add("drop-target");
+    });
+
+    card.addEventListener("dragenter", (event) => {
+      if (!draggedTrackerUrl || draggedTrackerUrl === tracker.url) {
+        return;
+      }
+      event.preventDefault();
+      clearDragCardClasses();
+      card.classList.add("drop-target");
+    });
+
+    card.addEventListener("dragleave", (event) => {
+      if (!(event.relatedTarget instanceof Node) || !card.contains(event.relatedTarget)) {
+        card.classList.remove("drop-target");
+      }
+    });
+
+    card.addEventListener("drop", (event) => {
+      event.preventDefault();
+      const draggedUrl = draggedTrackerUrl || event.dataTransfer?.getData("text/plain");
+      if (!draggedUrl || draggedUrl === tracker.url) {
+        clearDragCardClasses();
+        return;
+      }
+
+      draggedTrackerUrl = null;
+      clearDragCardClasses();
+      reorderTracker(draggedUrl, tracker.url);
+    });
 
     const summaries = renderContext.summariesByUrl.get(tracker.url) || {};
     const mobileSummary = summaries.mobile || null;
@@ -2044,11 +2195,13 @@ function serializeTracker(tracker) {
 
 function persistState() {
   try {
+    normalizeTrackerOrder();
     const payload = {
       apiKey: state.apiKey,
       pollIntervalSec: state.pollIntervalSec,
       themeMode: state.themeMode,
       trackers: Array.from(state.trackers.values()).map(serializeTracker),
+      trackerOrder: state.trackerOrder,
       sort: state.sort,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -2121,6 +2274,13 @@ function hydrateState() {
         state.trackers.set(url, tracker);
       }
     }
+
+    if (Array.isArray(parsed.trackerOrder)) {
+      state.trackerOrder = parsed.trackerOrder
+        .map((value) => normalizeUrl(String(value || "").trim()))
+        .filter(Boolean);
+    }
+    normalizeTrackerOrder();
   } catch (error) {
     console.warn("Failed to load saved state", error);
   }

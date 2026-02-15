@@ -4,8 +4,8 @@
   --header-bg: #ffffff;
   --card-bg: #fcfdff;
   --text: #1f2937;
-  --muted: #6b7280;
-  --muted-soft: #8793a3;
+  --muted: rgb(31 41 55 / 0.64);
+  --muted-soft: rgb(31 41 55 / 0.5);
   --border: #d5dce6;
   --border-strong: #c4c8ce;
   --input-bg: #ffffff;
@@ -15,7 +15,7 @@
   --surface-muted: #eef0f3;
   --surface-muted-2: #f4f5f7;
   --surface-muted-3: #dbdde1;
-  --table-head-text: #4b5563;
+  --table-head-text: rgb(31 41 55 / 0.78);
   --button-secondary-bg: #eceff3;
   --button-secondary-text: #4b5563;
   --button-secondary-border: #d1d5db;
@@ -56,8 +56,8 @@
   --header-bg: #0f172a;
   --card-bg: #0f172a;
   --text: #e5e7eb;
-  --muted: #94a3b8;
-  --muted-soft: #64748b;
+  --muted: rgb(229 231 235 / 0.68);
+  --muted-soft: rgb(229 231 235 / 0.52);
   --border: #334155;
   --border-strong: #334155;
   --input-bg: #0b1324;
@@ -67,7 +67,7 @@
   --surface-muted: #1f2937;
   --surface-muted-2: #141d2c;
   --surface-muted-3: #273449;
-  --table-head-text: #cbd5e1;
+  --table-head-text: rgb(229 231 235 / 0.82);
   --button-secondary-bg: #1f2937;
   --button-secondary-text: #d1d5db;
   --button-secondary-border: #475569;
@@ -254,26 +254,26 @@ button:disabled {
   cursor: not-allowed;
 }
 
-button:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(:disabled):hover {
+button:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(.drag-handle):not(:disabled):hover {
   box-shadow: var(--button-hover-shadow);
   transform: translateY(-1px);
 }
 
-button:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(:disabled):active {
+button:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(.drag-handle):not(:disabled):active {
   transform: translateY(0);
 }
 
-button:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(.secondary):not(.danger):not(:disabled):hover {
+button:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(.drag-handle):not(.secondary):not(.danger):not(:disabled):hover {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
 }
 
-button.secondary:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(:disabled):hover {
+button.secondary:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(.drag-handle):not(:disabled):hover {
   background: var(--button-secondary-hover-bg);
   border-color: var(--button-secondary-hover-border);
 }
 
-button.danger:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(:disabled):hover {
+button.danger:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(.drag-handle):not(:disabled):hover {
   background: var(--button-danger-hover-bg);
   border-color: var(--button-danger-hover-border);
 }
@@ -372,6 +372,53 @@ button.danger:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):
   min-width: 0;
 }
 
+.title-row {
+  position: relative;
+  min-width: 0;
+}
+
+.drag-handle {
+  position: absolute;
+  left: 30px;
+  top: -1px;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  z-index: 4;
+  opacity: 0;
+  pointer-events: none;
+  cursor: grab;
+  transform: translateX(-4px);
+  transition: opacity 120ms ease, transform 120ms ease, color 120ms ease;
+}
+
+.drag-handle svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.drag-handle:hover {
+  color: var(--text);
+}
+
+.title-row:hover .drag-handle,
+.title-row:focus-within .drag-handle,
+.url-card.dragging-active .drag-handle {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
+}
+
 .url-card-title {
   margin: 0;
   font-size: 1rem;
@@ -387,18 +434,24 @@ button.danger:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):
 
 .url-card-title {
   appearance: none;
-  border: 1px dashed transparent;
+  border: 1px solid transparent;
   background: transparent;
   color: var(--text);
   text-align: left;
   padding: 4px 6px;
   border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
   position: relative;
   width: calc(100% + 6px);
   margin-left: -6px;
   margin-right: 0;
   margin-top: -6px;
   cursor: text;
+  z-index: 1;
+  transition: border-color 120ms ease, background-color 120ms ease;
 }
 
 .url-card-title:hover {
@@ -407,22 +460,17 @@ button.danger:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):
 }
 
 .url-card-title::after {
-  content: attr(data-hint);
+  content: "";
   position: absolute;
-  right: 8px;
-  top: 6px;
-  font-size: 0.7rem;
-  color: var(--muted);
-  background: var(--card-bg);
-  border-radius: 4px;
-  padding: 1px 4px;
+  right: 0;
+  top: 0;
   z-index: 1;
   opacity: 0;
   pointer-events: none;
 }
 
 .url-card-title:hover::after {
-  opacity: 1;
+  opacity: 0;
 }
 
 .url-label-line {
@@ -431,6 +479,13 @@ button.danger:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):
   font-size: 1rem;
   line-height: 1.15;
   word-break: break-word;
+  transition: transform 120ms ease;
+}
+
+.title-row:hover .url-label-line,
+.title-row:focus-within .url-label-line,
+.url-card.dragging-active .url-label-line {
+  transform: translateX(26px);
 }
 
 .url-title-url {
@@ -465,6 +520,10 @@ button.danger:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):
 
 .url-card.is-editing-label .url-label-input {
   display: block;
+}
+
+.url-card.is-editing-label .drag-handle {
+  display: none;
 }
 
 .url-card-meta {
@@ -527,6 +586,40 @@ button.danger:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):
 .url-card-content {
   display: grid;
   gap: 8px;
+}
+
+.url-card.drop-target {
+  border-color: var(--accent);
+}
+
+@keyframes drop-zone-pulse {
+  from {
+    box-shadow: 0 0 0 0 var(--accent);
+  }
+  to {
+    box-shadow: 0 0 0 18px transparent;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .url-card.drop-target {
+    animation: drop-zone-pulse 1.25s ease-out infinite;
+  }
+}
+
+.url-card.is-dragging {
+  opacity: 0.55;
+}
+
+html {
+  view-transition-name: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-group(*) {
+    animation-duration: 280ms;
+    animation-timing-function: var(--panel-ease);
+  }
 }
 
 .details-section {
