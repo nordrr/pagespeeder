@@ -349,6 +349,7 @@ function createTracker(url) {
     lastError: "",
     phase: "paused",
     activeStrategy: null,
+    pauseReason: null,
     autoPauseArmed: false,
     removeConfirmArmed: false,
     removeConfirmReadyAt: 0,
@@ -363,6 +364,7 @@ function startTracker(tracker, runImmediately = false) {
   }
 
   tracker.running = true;
+  tracker.pauseReason = null;
   tracker.autoPauseArmed = false;
   tracker.lastError = "";
   if (tracker.timerId) {
@@ -393,6 +395,7 @@ function startTracker(tracker, runImmediately = false) {
 
 function stopTracker(tracker) {
   tracker.running = false;
+  tracker.pauseReason = null;
   tracker.lastError = "";
 
   if (tracker.timerId) {
@@ -912,6 +915,7 @@ async function runCycle(tracker) {
     tracker.running = false;
     tracker.phase = "paused";
     tracker.activeStrategy = null;
+    tracker.pauseReason = null;
     render();
     persistState();
     return;
@@ -1009,6 +1013,7 @@ function shouldAutoPauseAtOnePoint(tracker) {
   tracker.phase = "paused";
   tracker.activeStrategy = null;
   tracker.nextRunAt = null;
+  tracker.pauseReason = "stat-sig-1";
   tracker.autoPauseArmed = false;
   return true;
 }
@@ -1571,6 +1576,9 @@ function describeTrackerStatus(tracker) {
   }
 
   if (!tracker.running) {
+    if (tracker.pauseReason === "stat-sig-1") {
+      return "Paused (reached stat sig ±1)";
+    }
     return "Paused";
   }
 
@@ -2821,6 +2829,7 @@ function serializeTracker(tracker) {
     lastError: tracker.lastError,
     phase: tracker.phase,
     activeStrategy: tracker.activeStrategy,
+    pauseReason: tracker.pauseReason,
     autoPauseArmed: tracker.autoPauseArmed === true,
   };
 }
@@ -2903,6 +2912,8 @@ function hydrateState() {
         }
         tracker.activeStrategy =
           typeof stored.activeStrategy === "string" ? stored.activeStrategy : null;
+        tracker.pauseReason =
+          stored.pauseReason === "stat-sig-1" ? "stat-sig-1" : null;
         tracker.autoPauseArmed = stored.autoPauseArmed === true;
 
         state.trackers.set(url, tracker);
