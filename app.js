@@ -99,12 +99,22 @@ const TOOLTIP_DELAY_MS = 250;
 const TOOLTIP_HIDE_GRACE_MS = 120;
 const REMOVE_CONFIRM_LOCKOUT_MS = 1000;
 const REMOVE_CONFIRM_ARM_TTL_MS = 10000;
+const DRAG_PREVIEW_SCALE = 0.25;
+const DRAG_PREVIEW_OFFSET = 10;
+const DRAG_PREVIEW_FADE_IN_MS = 90;
+const DRAG_PREVIEW_FADE_OUT_MS = 140;
 
 let tooltipAnchor = null;
 let tooltipShowTimerId = null;
 let tooltipHideTimerId = null;
 let headerSyncRafId = null;
 let draggedTrackerUrl = null;
+let dragPreviewElement = null;
+let dragPreviewBaseWidth = 0;
+let dragPreviewAnimating = false;
+let dragDidDrop = false;
+let dragEndCleanupTimerId = null;
+let transparentDragImage = null;
 const systemThemeQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
 if (runDetailBackdrop) {
@@ -142,6 +152,9 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && state.runDetail) {
     closeRunDetailPanel();
   }
+});
+document.addEventListener("dragover", (event) => {
+  updateDragPreviewPosition(event.clientX, event.clientY);
 });
 window.addEventListener("scroll", () => hideTooltip(), true);
 window.addEventListener("resize", () => hideTooltip());
@@ -543,6 +556,104 @@ function clearDropTargets() {
   }
 }
 
+function getTransparentDragImage() {
+  if (transparentDragImage) {
+    return transparentDragImage;
+  }
+  const img = new Image();
+  img.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
+  transparentDragImage = img;
+  return transparentDragImage;
+}
+
+function clearDragPreview() {
+  if (dragEndCleanupTimerId) {
+    clearTimeout(dragEndCleanupTimerId);
+    dragEndCleanupTimerId = null;
+  }
+  if (dragPreviewElement) {
+    dragPreviewElement.remove();
+  }
+  dragPreviewElement = null;
+  dragPreviewBaseWidth = 0;
+  dragPreviewAnimating = false;
+}
+
+function setGlobalDraggingCursor(isDragging) {
+  document.body.classList.toggle("url-dragging", Boolean(isDragging));
+}
+
+function updateDragPreviewPosition(clientX, clientY) {
+  if (!dragPreviewElement || dragPreviewAnimating) {
+    return;
+  }
+  if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) {
+    return;
+  }
+  const x = clientX + DRAG_PREVIEW_OFFSET;
+  const y = clientY + DRAG_PREVIEW_OFFSET;
+  dragPreviewElement.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${DRAG_PREVIEW_SCALE})`;
+}
+
+function createDragPreview(card, clientX, clientY) {
+  clearDragPreview();
+  const rect = card.getBoundingClientRect();
+  const preview = card.cloneNode(true);
+  preview.classList.remove("drop-target", "is-dragging", "dragging-active", "is-editing-label");
+  preview.classList.add("drag-preview");
+  preview.style.viewTransitionName = "none";
+  preview.style.width = `${rect.width}px`;
+  preview.style.height = `${rect.height}px`;
+  preview.style.transition = "none";
+  dragPreviewElement = preview;
+  dragPreviewBaseWidth = rect.width;
+  document.body.append(preview);
+  const startX = Number.isFinite(clientX) ? clientX : rect.left;
+  const startY = Number.isFinite(clientY) ? clientY : rect.top;
+  updateDragPreviewPosition(startX, startY);
+  preview.style.opacity = "0";
+  requestAnimationFrame(() => {
+    if (!dragPreviewElement) {
+      return;
+    }
+    dragPreviewElement.style.transition = `opacity ${DRAG_PREVIEW_FADE_IN_MS}ms ease-out`;
+    dragPreviewElement.style.opacity = "0.92";
+  });
+}
+
+function fadeOutDragPreview() {
+  if (!dragPreviewElement) {
+    clearDragPreview();
+    return;
+  }
+  dragPreviewAnimating = true;
+
+  let done = false;
+  const finish = () => {
+    if (done) {
+      return;
+    }
+    done = true;
+    clearDragPreview();
+  };
+
+  if (typeof dragPreviewElement.animate === "function") {
+    const animation = dragPreviewElement.animate(
+      [{ opacity: 0.92 }, { opacity: 0 }],
+      { duration: DRAG_PREVIEW_FADE_OUT_MS, easing: "ease-out", fill: "forwards" },
+    );
+    animation.addEventListener("finish", finish, { once: true });
+    animation.addEventListener("cancel", finish, { once: true });
+    setTimeout(finish, DRAG_PREVIEW_FADE_OUT_MS + 80);
+    return;
+  }
+
+  dragPreviewElement.style.transition = `opacity ${DRAG_PREVIEW_FADE_OUT_MS}ms ease-out`;
+  dragPreviewElement.style.opacity = "0";
+  dragPreviewElement.addEventListener("transitionend", finish, { once: true });
+  setTimeout(finish, DRAG_PREVIEW_FADE_OUT_MS + 80);
+}
+
 function runWithViewTransition(update) {
   if (
     typeof document.startViewTransition === "function" &&
@@ -652,6 +763,10 @@ function showTooltipNow(text, anchor) {
 }
 
 function showTooltip(text, anchor, instant = false) {
+  if (draggedTrackerUrl || dragPreviewElement) {
+    hideTooltip();
+    return;
+  }
   if (!text || !anchor) {
     return;
   }
@@ -1996,16 +2111,42 @@ function renderCards(renderContext) {
         }
       });
       dragHandle.addEventListener("dragstart", (event) => {
+        if (dragEndCleanupTimerId) {
+          clearTimeout(dragEndCleanupTimerId);
+          dragEndCleanupTimerId = null;
+        }
+        hideTooltip();
+        dragDidDrop = false;
         draggedTrackerUrl = tracker.url;
+        setGlobalDraggingCursor(true);
         card.classList.add("is-dragging", "dragging-active");
         if (event.dataTransfer) {
           event.dataTransfer.effectAllowed = "move";
           event.dataTransfer.setData("text/plain", tracker.url);
+          event.dataTransfer.setDragImage(getTransparentDragImage(), 0, 0);
         }
+        createDragPreview(card, event.clientX, event.clientY);
       });
       dragHandle.addEventListener("dragend", () => {
+        hideTooltip();
+        setGlobalDraggingCursor(false);
         draggedTrackerUrl = null;
-        clearDragCardClasses();
+        if (dragDidDrop || dragPreviewAnimating) {
+          clearDropTargets();
+          return;
+        }
+        if (dragEndCleanupTimerId) {
+          clearTimeout(dragEndCleanupTimerId);
+        }
+        // Some browsers fire dragend before drop; allow drop to win first.
+        dragEndCleanupTimerId = setTimeout(() => {
+          dragEndCleanupTimerId = null;
+          if (dragDidDrop || dragPreviewAnimating) {
+            return;
+          }
+          clearDragCardClasses();
+          clearDragPreview();
+        }, 60);
       });
     }
 
@@ -2123,11 +2264,19 @@ function renderCards(renderContext) {
       const draggedUrl = draggedTrackerUrl || event.dataTransfer?.getData("text/plain");
       if (!draggedUrl || draggedUrl === tracker.url) {
         clearDragCardClasses();
+        clearDragPreview();
+        dragDidDrop = false;
         return;
       }
 
+      dragDidDrop = true;
+      if (dragEndCleanupTimerId) {
+        clearTimeout(dragEndCleanupTimerId);
+        dragEndCleanupTimerId = null;
+      }
       draggedTrackerUrl = null;
-      clearDragCardClasses();
+      clearDropTargets();
+      fadeOutDragPreview();
       reorderTracker(draggedUrl, tracker.url);
     });
 

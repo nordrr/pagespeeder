@@ -121,6 +121,11 @@ body.run-detail-open {
   overflow: hidden;
 }
 
+body.url-dragging,
+body.url-dragging * {
+  cursor: grabbing !important;
+}
+
 .page-header {
   display: flex;
   flex-wrap: wrap;
@@ -356,6 +361,7 @@ button.danger:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):
   width: min(100%, 450px);
   min-width: 0;
   max-width: 450px;
+  transition: transform 180ms var(--panel-ease), opacity 180ms var(--panel-ease), border-color 160ms ease, box-shadow 180ms var(--panel-ease);
 }
 
 .url-cards > .placeholder {
@@ -637,7 +643,29 @@ button.danger:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):
 }
 
 .url-card.is-dragging {
-  opacity: 0.55;
+  opacity: 1;
+  transform: translateY(-7px);
+  box-shadow: 0 8px 14px rgba(15, 23, 42, 0.13);
+}
+
+.drag-preview {
+  position: fixed;
+  top: 0;
+  left: 0;
+  margin: 0;
+  pointer-events: none;
+  z-index: 9999;
+  transform-origin: top left;
+  opacity: 0.92;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.24);
+  will-change: transform, opacity;
+  contain: layout paint;
+  backface-visibility: hidden;
+}
+
+.drag-preview .url-label-input,
+.drag-preview .url-card-actions {
+  visibility: hidden;
 }
 
 html {
