@@ -297,6 +297,34 @@ function stopTracker(tracker) {
   persistState();
 }
 
+function triggerImmediateCycle(tracker) {
+  if (tracker.inFlight) {
+    return;
+  }
+
+  if (tracker.timerId) {
+    clearTimeout(tracker.timerId);
+    tracker.timerId = null;
+  }
+  tracker.nextRunAt = null;
+  tracker.lastError = "";
+
+  if (tracker.running) {
+    runCycle(tracker);
+    persistState();
+    render();
+    return;
+  }
+
+  // Paused case: run a single cycle, then remain paused.
+  tracker.running = true;
+  tracker.phase = "queued";
+  tracker.activeStrategy = null;
+  runCycle(tracker);
+  stopTracker(tracker);
+  render();
+}
+
 function removeTracker(url) {
   const tracker = state.trackers.get(url);
   if (!tracker) {
@@ -1627,7 +1655,7 @@ function renderCards(renderContext) {
 
     const iconPlay = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
     const iconPause = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zm6 0h4v14h-4z"/></svg>';
-    const iconRunNow = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2L8 6l4 4V7c3.3 0 6 2.7 6 6 0 1.4-.5 2.7-1.3 3.7l1.5 1.5A7.95 7.95 0 0 0 20 13c0-4.4-3.6-8-8-8zM6 13c0-1.4.5-2.7 1.3-3.7L5.8 7.8A7.95 7.95 0 0 0 4 13c0 4.4 3.6 8 8 8v3l4-4-4-4v3c-3.3 0-6-2.7-6-6z"/></svg>';
+    const iconRunNow = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>';
     const iconTrash = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v9h-2V9zm4 0h2v9h-2V9zM7 9h2v9H7V9z"/></svg>';
 
     toggleButton.classList.toggle("is-running", tracker.running);
@@ -1647,14 +1675,14 @@ function renderCards(renderContext) {
 
     runNowButton.disabled = tracker.inFlight;
     runNowButton.innerHTML = iconRunNow;
-    runNowButton.setAttribute("aria-label", "Run now");
-    runNowButton.dataset.tooltip = "Run now";
+    runNowButton.setAttribute("aria-label", tracker.running ? "Run now" : "Run once");
+    runNowButton.dataset.tooltip = tracker.running ? "Run now" : "Run once";
     attachTooltipHandlers(runNowButton);
     runNowButton.addEventListener("click", () => {
       if (!syncConfigFromInputs()) {
         return;
       }
-      startTracker(tracker, true);
+      triggerImmediateCycle(tracker);
     });
 
     removeButton.innerHTML = iconTrash;
