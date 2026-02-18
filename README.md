@@ -1,4 +1,4 @@
-# PageSpeed Tracker
+# PageSpeeder – Google PageSpeed Tracker
 
 Track Google PageSpeed Insights repeatedly, average results over time, and compare multiple URLs side by side.
 
@@ -19,7 +19,7 @@ Track Google PageSpeed Insights repeatedly, average results over time, and compa
 ### 1) Clone and enter the project
 
 ```bash
-git clone <your-repo-url>
+git clone git@github.com:nordrr/pagespeeder.git
 cd pagespeeder
 ```
 
