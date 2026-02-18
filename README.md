@@ -48,6 +48,7 @@ API key setup docs:
 - Clicking **Run once** on a paused card submits one cycle only.
 - Clicking **Resume** enables continuous polling again.
 - If auto-pause conditions are met, status will show that it paused at stat-sig threshold.
+- All settings and collected samples are stored in your browser local storage for this app.
 
 ## API Endpoint
 
