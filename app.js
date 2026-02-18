@@ -121,6 +121,7 @@ let dragEndCleanupTimerId = null;
 let transparentDragImage = null;
 let pendingLabelEditUrl = null;
 let suppressLabelBlurCommit = false;
+let skipLabelEditRestoreOnNextRender = false;
 const systemThemeQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
 if (runDetailBackdrop) {
@@ -2398,7 +2399,7 @@ function scheduleHeaderHeightSync() {
 }
 
 function render() {
-  const labelEditState = getActiveLabelEditState();
+  const labelEditState = skipLabelEditRestoreOnNextRender ? null : getActiveLabelEditState();
   suppressLabelBlurCommit = Boolean(labelEditState);
   const active = document.activeElement;
   if (active instanceof Element && active.matches("#comparison-table th.sortable")) {
@@ -2420,6 +2421,7 @@ function render() {
     scheduleHeaderHeightSync();
   } finally {
     suppressLabelBlurCommit = false;
+    skipLabelEditRestoreOnNextRender = false;
   }
 }
 
@@ -2551,6 +2553,7 @@ function renderCards(renderContext) {
       const resumeEditUrl = pendingLabelEditUrl;
       pendingLabelEditUrl = null;
       tracker.label = labelInput.value.trim();
+      skipLabelEditRestoreOnNextRender = true;
       persistState();
       render();
       if (resumeEditUrl && resumeEditUrl !== tracker.url) {
@@ -2564,6 +2567,7 @@ function renderCards(renderContext) {
       const resumeEditUrl = pendingLabelEditUrl;
       pendingLabelEditUrl = null;
       card.classList.remove("is-editing-label");
+      skipLabelEditRestoreOnNextRender = true;
       render();
       if (resumeEditUrl && resumeEditUrl !== tracker.url) {
         requestAnimationFrame(() => {
@@ -2573,6 +2577,9 @@ function renderCards(renderContext) {
     };
 
     labelInput.addEventListener("keydown", (event) => {
+      if (event.isComposing) {
+        return;
+      }
       if (event.key === "Enter") {
         event.preventDefault();
         commitLabel();
