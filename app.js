@@ -122,6 +122,10 @@ let transparentDragImage = null;
 let pendingLabelEditUrl = null;
 let suppressLabelBlurCommit = false;
 let skipLabelEditRestoreOnNextRender = false;
+let clearAllConfirmArmed = false;
+let clearAllConfirmReadyAt = 0;
+let clearAllConfirmLockTimerId = null;
+let clearAllConfirmExpireTimerId = null;
 const systemThemeQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
 if (runDetailBackdrop) {
@@ -197,13 +201,28 @@ document.addEventListener("pointerdown", (event) => {
   if (!(target instanceof Element)) {
     return;
   }
+  let changed = false;
   const removeButton = target.closest(".remove");
   const removeCard = removeButton?.closest(".url-card[data-url]");
   const keepArmedUrl = removeCard?.dataset.url || null;
   if (disarmAllTrackerRemovals(keepArmedUrl)) {
+    changed = true;
+  }
+  const keepClearAllArmed = Boolean(target.closest("#clear-all"));
+  if (!keepClearAllArmed && clearAllConfirmArmed) {
+    disarmClearAllRemoval();
+    changed = true;
+  }
+  if (changed) {
     render();
   }
 }, true);
+
+if (clearAllButton) {
+  clearAllButton.dataset.tooltip = "Clear all data";
+  clearAllButton.setAttribute("aria-label", "Clear all data");
+  attachTooltipHandlers(clearAllButton);
+}
 
 for (const header of sortableHeaders) {
   header.tabIndex = 0;
@@ -298,9 +317,22 @@ stopAllButton.addEventListener("click", () => {
 });
 
 clearAllButton.addEventListener("click", () => {
-  if (!window.confirm("Clear all URLs and collected data?")) {
+  if (!clearAllConfirmArmed) {
+    hideTooltip();
+    armClearAllRemoval();
+    render();
+    requestAnimationFrame(() => {
+      if (clearAllConfirmArmed) {
+        showTooltip("Really remove?", clearAllButton, true);
+      }
+    });
     return;
   }
+  if (Date.now() < clearAllConfirmReadyAt) {
+    return;
+  }
+  disarmClearAllRemoval();
+  hideTooltip();
 
   for (const tracker of state.trackers.values()) {
     stopTracker(tracker);
@@ -524,6 +556,57 @@ function armTrackerRemoval(tracker) {
     }
     disarmTrackerRemoval(tracker, true);
   }, REMOVE_CONFIRM_ARM_TTL_MS);
+}
+
+function disarmClearAllRemoval(shouldRender = false) {
+  if (clearAllConfirmLockTimerId) {
+    clearTimeout(clearAllConfirmLockTimerId);
+    clearAllConfirmLockTimerId = null;
+  }
+  if (clearAllConfirmExpireTimerId) {
+    clearTimeout(clearAllConfirmExpireTimerId);
+    clearAllConfirmExpireTimerId = null;
+  }
+
+  clearAllConfirmArmed = false;
+  clearAllConfirmReadyAt = 0;
+  if (shouldRender) {
+    render();
+  }
+}
+
+function armClearAllRemoval() {
+  disarmAllTrackerRemovals();
+  disarmClearAllRemoval();
+  clearAllConfirmArmed = true;
+  clearAllConfirmReadyAt = Date.now() + REMOVE_CONFIRM_LOCKOUT_MS;
+
+  clearAllConfirmLockTimerId = setTimeout(() => {
+    clearAllConfirmLockTimerId = null;
+    if (!clearAllConfirmArmed) {
+      return;
+    }
+    render();
+  }, REMOVE_CONFIRM_LOCKOUT_MS);
+
+  clearAllConfirmExpireTimerId = setTimeout(() => {
+    if (!clearAllConfirmArmed) {
+      return;
+    }
+    disarmClearAllRemoval(true);
+  }, REMOVE_CONFIRM_ARM_TTL_MS);
+}
+
+function updateClearAllButtonState() {
+  if (!clearAllButton) {
+    return;
+  }
+  const locked = clearAllConfirmArmed && Date.now() < clearAllConfirmReadyAt;
+  clearAllButton.classList.toggle("remove-confirm", clearAllConfirmArmed);
+  clearAllButton.disabled = locked;
+  const label = clearAllConfirmArmed ? "Really remove?" : "Clear all data";
+  clearAllButton.dataset.tooltip = label;
+  clearAllButton.setAttribute("aria-label", label);
 }
 
 function getOrderedTrackerUrls() {
@@ -2406,6 +2489,7 @@ function render() {
     active.blur();
   }
   try {
+    updateClearAllButtonState();
     if (toggleDetailsButton) {
       toggleDetailsButton.textContent = state.showDetails ? "Hide Details" : "Show Details";
       toggleDetailsButton.setAttribute("aria-label", state.showDetails ? "Hide Details" : "Show Details");
