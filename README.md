@@ -1,53 +1,65 @@
 # PageSpeed Tracker
 
-Track Google PageSpeed Insights repeatedly, average the results, and compare multiple URLs side by side.
+Track Google PageSpeed Insights repeatedly, average results over time, and compare multiple URLs side by side.
 
-## Features
+## What It Does
 
-- Runs tests on a timer (minimum 60 seconds).
-- Runs both **mobile** and **desktop** strategy each cycle.
-- Tracks and averages:
+- Runs PageSpeed Insights continuously for each tracked URL.
+- Runs both **mobile** and **desktop** each cycle.
+- Uses a fixed **60-second poll interval** (Google PSI minimum).
+- Tracks:
   - Performance score
-  - First Contentful Paint (FCP)
-  - Speed Index (SI)
-  - Largest Contentful Paint (LCP)
-  - Total Blocking Time (TBT)
-  - Cumulative Layout Shift (CLS)
-- Computes a **95% confidence interval** for average score as `mean ± points`.
-- Compares multiple URLs in a percentile-colored table (higher percentile = greener).
-- Includes per-URL scrollable run history with each sample's score + metrics.
-- Supports clickable table-header sorting (asc, desc, then back to default order).
-- Shows live per-URL status (waiting for Google response vs waiting for timer).
-- Persists API key, URLs, and collected history in browser local storage.
-- No signup/auth system. User enters their own Google API key.
+  - FCP, SI, LCP, TBT, CLS
+- Computes 95% confidence intervals (`mean ± points`) for score stability.
+- Stores app state in local storage (API key, tracked URLs, run history, UI settings).
+- Provides card view + comparison table with sortable columns and color-coded values.
 
-## Local Run
+## Quick Start (Local)
 
-1. Ensure Node.js 18+ is installed.
-2. Start the local server:
+### 1) Clone and enter the project
+
+```bash
+git clone <your-repo-url>
+cd pagespeeder
+```
+
+### 2) Start the local server
 
 ```bash
 node server.js
 ```
 
-3. Open [http://localhost:3000](http://localhost:3000).
-4. Enter your Google API key, poll interval (>= 60), and a URL.
+### 3) Open the app
 
-## API Endpoint Used
+Go to [http://localhost:3000](http://localhost:3000).
+
+### 4) Add your API key and first URL
+
+1. Paste your Google API key in **Settings**.
+2. Click **Save Settings**.
+3. Add a URL in **Add URL**.
+
+API key setup docs:
+- [PageSpeed Insights API v5: Get Started](https://developers.google.com/speed/docs/insights/v5/get-started)
+
+## Usage Notes
+
+- Polling is fixed at 60 seconds (otherwise, Google returns a cached result).
+- Clicking **Run once** on a paused card submits one cycle only.
+- Clicking **Resume** enables continuous polling again.
+- If auto-pause conditions are met, status will show that it paused at stat-sig threshold.
+
+## API Endpoint
 
 The app calls:
-
 - `https://www.googleapis.com/pagespeedonline/v5/runPagespeed`
 
-Request params used:
-
+Request parameters:
 - `url`
 - `key`
 - `strategy` (`mobile` or `desktop`)
 - `category=performance`
 
-## Notes
+## Deployment
 
-- The confidence interval is based on sample variation and sample count. More samples narrow the interval.
-- API quotas/rate limits depend on your Google Cloud project settings.
-- This is a static frontend app with a tiny static file server, so deployment to most hosts is straightforward.
+This is a static frontend plus a tiny Node static server (`server.js`), so it can be run locally or hosted behind any static-serving setup.

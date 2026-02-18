@@ -55,15 +55,21 @@
         <h2>Settings</h2>
         <form id="settings-form" autocomplete="off">
           <label>
-            Google API Key
+            <span class="field-label-line">
+              Google PageSpeed API Key
+              <a
+                class="inline-link-btn"
+                href="https://developers.google.com/speed/docs/insights/v5/get-started"
+                target="_blank"
+                rel="noopener noreferrer"
+              >(get one here)</a>
+            </span>
             <input id="api-key" name="apiKey" type="password" placeholder="AIza..." required />
           </label>
-          <button type="submit">Save Settings</button>
+          <button type="submit">Save API Key</button>
         </form>
         <p class="hint">
-          Poll interval is fixed at <strong>60 seconds</strong> (Google PSI minimum).
-          Runs both <strong>mobile</strong> and <strong>desktop</strong> tests each cycle.
-          Confidence is shown as a 95% interval: <code>mean ± points</code>.
+          Confidence values are shown as a 95% interval: <code>mean ± points</code>.
         </p>
       </section>
 
@@ -77,7 +83,7 @@
           <p id="shopify-pb-suggestion" class="inline-hint" hidden>
             Shopify preview URL detected.
             <button id="shopify-pb-action" type="button" class="inline-link-btn">
-              Add <code>pb=0</code> to remove the preview bar
+              Add <code>pb=0</code> to remove the preview bar?
             </button>
           </p>
           <button type="submit">Add URL</button>
