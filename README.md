@@ -14,6 +14,9 @@ Track Google PageSpeed Insights repeatedly, average results over time, and compa
 - Stores app state in local storage (API key, tracked URLs, run history, UI settings).
 - Provides card view + comparison table with sortable columns and color-coded values.
 
+## Screenshot
+![Screenshot of PageSpeeder UI comparing multiple URLs](readme-screenshot.png)
+
 ## Quick Start (Local)
 
 ### 1) Clone and enter the project
