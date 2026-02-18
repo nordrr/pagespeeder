@@ -1,17 +1,18 @@
 # PageSpeeder – Google PageSpeed Tracker
 
-Track Google PageSpeed Insights repeatedly, average results over time, and compare multiple URLs side by side.
+Track Google PageSpeed Insights performance scores repeatedly to average results over time and easily compare multiple URLs side by side with 95% confidence intervals.
 
 ## What It Does
 
 - Runs PageSpeed Insights continuously for each tracked URL.
+- Select one URL as baseline to easily compare scores.
 - Runs both **mobile** and **desktop** each cycle.
 - Uses a fixed **60-second poll interval** (Google PSI minimum).
 - Tracks:
   - Performance score
   - FCP, SI, LCP, TBT, CLS
 - Computes 95% confidence intervals (`mean ± points`) for score stability.
-- Stores app state in local storage (API key, tracked URLs, run history, UI settings).
+- Stores app state in your browser's localStorage (API key, tracked URLs, run history, etc.).
 - Provides card view + comparison table with sortable columns and color-coded values.
 
 ## Screenshot
@@ -47,13 +48,13 @@ API key setup docs:
 
 ## Usage Notes
 
-- Polling is fixed at 60 seconds (otherwise, Google returns a cached result).
+- All settings and collected samples are stored in your browser's localStorage.
+- Polling is fixed at once every 60 seconds (otherwise, Google returns a cached result).
+- Once a URL reaches stat-sig threshold (95% confidence of ±1 points), it will auto-pause.
 - Clicking **Run once** on a paused card submits one cycle only.
 - Clicking **Resume** enables continuous polling again.
-- If auto-pause conditions are met, status will show that it paused at stat-sig threshold.
-- All settings and collected samples are stored in your browser local storage for this app.
 
-## API Endpoint
+## PageSpeed API Endpoint
 
 The app calls:
 - `https://www.googleapis.com/pagespeedonline/v5/runPagespeed`
