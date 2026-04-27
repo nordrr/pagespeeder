@@ -27,24 +27,44 @@ git clone git@github.com:nordrr/pagespeeder.git
 cd pagespeeder
 ```
 
-### 2) Start the local server
+### 2) Install dependencies
 
 ```bash
-node server.js
+npm install
 ```
 
-### 3) Open the app
+### 3) Start the Vite dev server
+
+```bash
+npm run dev
+```
+
+### 4) Open the app
 
 Go to [http://localhost:3000](http://localhost:3000).
 
-### 4) Add your API key and first URL
+### 5) Add your API key and first URL
 
-1. Paste your Google API key in **Settings**.
-2. Click **Save Settings**.
-3. Add a URL in **Add URL**.
+1. Click **API Key** in the header.
+2. Paste your Google API key and click **Save Key**.
+3. Add a URL in the launch panel.
 
 API key setup docs:
 - [PageSpeed Insights API v5: Get Started](https://developers.google.com/speed/docs/insights/v5/get-started)
+
+## Build for Production
+
+```bash
+npm run build
+```
+
+Vite will output the production files to `dist/`.
+
+To preview the built app locally:
+
+```bash
+npm run preview
+```
 
 ## Usage Notes
 
@@ -67,4 +87,4 @@ Request parameters:
 
 ## Deployment
 
-This is a static frontend plus a tiny Node static server (`server.js`), so it can be run locally or hosted behind any static-serving setup.
+This is a static frontend bundled by Vite. You can deploy the generated `dist/` directory to any static host.

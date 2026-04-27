@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>PageSpeed Tracker</title>
+    <title>PageSpeeder</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -32,52 +32,54 @@
   </head>
   <body>
     <header class="page-header">
-      <div>
-        <h1>PageSpeed Tracker</h1>
-        <p>Track PageSpeed Insights over time, average results, and compare URLs.</p>
+      <div class="brand-lockup">
+        <span class="brand-mark" aria-hidden="true">PS</span>
+        <div>
+          <h1>PageSpeeder</h1>
+          <p>Find your true PageSpeed</p>
+        </div>
       </div>
       <div class="header-actions">
-        <label class="theme-control" for="theme-mode">
-          <span>Theme</span>
-          <select id="theme-mode" name="themeMode" aria-label="Theme mode">
-            <option value="auto">Auto</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-          </select>
-        </label>
+        <button id="open-settings" type="button" class="secondary api-key-button">
+          <span>API Key</span>
+          <span id="api-key-status" class="status-dot-label">Not set</span>
+        </button>
+        <fieldset class="theme-control" aria-label="Theme mode">
+          <legend>Theme</legend>
+          <button type="button" class="theme-mode-button" data-theme-mode="auto" aria-label="Use system theme">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7A2.5 2.5 0 0 1 17.5 16H13v2h3v2H8v-2h3v-2H6.5A2.5 2.5 0 0 1 4 13.5v-7Zm2 0v7c0 .28.22.5.5.5h11a.5.5 0 0 0 .5-.5v-7a.5.5 0 0 0-.5-.5h-11a.5.5 0 0 0-.5.5Z"></path>
+            </svg>
+          </button>
+          <button type="button" class="theme-mode-button" data-theme-mode="light" aria-label="Use light theme">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M11 2h2v3h-2V2Zm0 17h2v3h-2v-3ZM4.22 5.64l1.42-1.42 2.12 2.12-1.42 1.42-2.12-2.12Zm12.02 12.02 1.42-1.42 2.12 2.12-1.42 1.42-2.12-2.12ZM2 11h3v2H2v-2Zm17 0h3v2h-3v-2ZM4.22 18.36l2.12-2.12 1.42 1.42-2.12 2.12-1.42-1.42ZM16.24 6.34l2.12-2.12 1.42 1.42-2.12 2.12-1.42-1.42ZM12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8Z"></path>
+            </svg>
+          </button>
+          <button type="button" class="theme-mode-button" data-theme-mode="dark" aria-label="Use dark theme">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M20.2 14.6A7.6 7.6 0 0 1 9.4 3.8a8.6 8.6 0 1 0 10.8 10.8Z"></path>
+            </svg>
+          </button>
+        </fieldset>
         <button id="start-all" type="button">Start All</button>
         <button id="stop-all" type="button" class="secondary">Stop All</button>
       </div>
     </header>
 
     <main>
-      <section class="panel controls-panel">
-        <h2>Settings</h2>
-        <form id="settings-form" autocomplete="off">
-          <label>
-            <span class="field-label-line">
-              Google PageSpeed API Key
-              <a
-                class="inline-link-btn"
-                href="https://developers.google.com/speed/docs/insights/v5/get-started"
-                target="_blank"
-                rel="noopener noreferrer"
-              >(get one here)</a>
-            </span>
-            <input id="api-key" name="apiKey" type="password" placeholder="AIza..." required />
-          </label>
-          <button type="submit">Save API Key</button>
-        </form>
-        <p class="hint">
-          Confidence values are shown as a 95% interval: <code>mean ± points</code>.
-        </p>
-      </section>
-
-      <section class="panel controls-panel">
-        <h2>Add URL</h2>
+      <section class="panel launch-panel">
+        <div class="launch-copy">
+          <p class="eyebrow">PageSpeed Insights sampling</p>
+          <h2>Measure any page with repeat runs.</h2>
+          <p>
+            Enter a URL and PageSpeeder will keep testing it until the average becomes useful,
+            so you can tell whether a change really moved your score.
+          </p>
+        </div>
         <form id="add-url-form" autocomplete="off">
           <label>
-            URL
+            <span class="field-label-line">URL to track</span>
             <input id="url-input" name="url" type="url" placeholder="https://example.com" required />
           </label>
           <p id="shopify-pb-suggestion" class="inline-hint" hidden>
@@ -86,7 +88,10 @@
               Add <code>pb=0</code> to remove the preview bar?
             </button>
           </p>
-          <button type="submit">Add URL</button>
+          <button type="submit">Add and Start</button>
+          <p id="setup-hint" class="setup-hint">
+            Add your Google PageSpeed API key before the first run.
+          </p>
         </form>
       </section>
 
@@ -205,6 +210,41 @@
     </template>
 
     <div id="run-detail-backdrop" class="run-detail-backdrop" hidden></div>
+    <dialog id="api-key-dialog" class="settings-dialog" aria-labelledby="api-key-dialog-title">
+      <form id="settings-form" method="dialog" autocomplete="off">
+        <div class="dialog-header">
+          <div>
+            <p class="eyebrow">Private setup</p>
+            <h2 id="api-key-dialog-title">Google PageSpeed API Key</h2>
+          </div>
+          <button id="api-key-dialog-close" type="button" class="icon-btn secondary" aria-label="Close settings">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6.7 5.3 12 10.6l5.3-5.3 1.4 1.4-5.3 5.3 5.3 5.3-1.4 1.4-5.3-5.3-5.3 5.3-1.4-1.4 5.3-5.3-5.3-5.3 1.4-1.4Z"></path>
+            </svg>
+          </button>
+        </div>
+        <p class="dialog-copy">
+          Your key is saved in this browser's localStorage and sent directly to Google's PageSpeed
+          Insights API when you run an audit.
+        </p>
+        <label>
+          <span class="field-label-line">
+            API key
+            <a
+              class="inline-link-btn"
+              href="https://developers.google.com/speed/docs/insights/v5/get-started"
+              target="_blank"
+              rel="noopener noreferrer"
+            >Get one from Google</a>
+          </span>
+          <input id="api-key" name="apiKey" type="password" placeholder="AIza..." required />
+        </label>
+        <div class="dialog-actions">
+          <button id="clear-api-key" type="button" class="secondary danger">Remove Key</button>
+          <button type="submit">Save Key</button>
+        </div>
+      </form>
+    </dialog>
     <aside id="run-detail-panel" class="run-detail-panel" aria-hidden="true">
       <header class="run-detail-header">
         <h2>Run Details</h2>
@@ -216,6 +256,6 @@
     </aside>
     <div id="ui-tooltip" class="ui-tooltip" hidden></div>
 
-    <script src="app.js"></script>
+    <script type="module" src="/app.js"></script>
   </body>
 </html>

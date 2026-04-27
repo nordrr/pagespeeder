@@ -91,7 +91,13 @@ const startAllButton = document.getElementById("start-all");
 const stopAllButton = document.getElementById("stop-all");
 const clearAllButton = document.getElementById("clear-all");
 const toggleDetailsButton = document.getElementById("toggle-details");
-const themeModeSelect = document.getElementById("theme-mode");
+const themeModeButtons = Array.from(document.querySelectorAll(".theme-mode-button[data-theme-mode]"));
+const openSettingsButton = document.getElementById("open-settings");
+const apiKeyStatus = document.getElementById("api-key-status");
+const setupHint = document.getElementById("setup-hint");
+const apiKeyDialog = document.getElementById("api-key-dialog");
+const apiKeyDialogCloseButton = document.getElementById("api-key-dialog-close");
+const clearApiKeyButton = document.getElementById("clear-api-key");
 const runDetailBackdrop = document.getElementById("run-detail-backdrop");
 const runDetailPanel = document.getElementById("run-detail-panel");
 const runDetailCloseButton = document.getElementById("run-detail-close");
@@ -148,8 +154,10 @@ function applyThemeMode() {
   const resolvedTheme = getResolvedTheme(mode);
   document.documentElement.dataset.theme = resolvedTheme;
   document.documentElement.style.colorScheme = resolvedTheme;
-  if (themeModeSelect && themeModeSelect.value !== mode) {
-    themeModeSelect.value = mode;
+  for (const button of themeModeButtons) {
+    const isActive = button.dataset.themeMode === mode;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
   }
 }
 
@@ -185,16 +193,18 @@ if (typeof systemThemeQuery.addEventListener === "function") {
     }
   });
 }
-themeModeSelect?.addEventListener("change", () => {
-  const requestedMode = themeModeSelect.value;
-  if (!THEME_MODES.has(requestedMode)) {
-    return;
-  }
-  state.themeMode = requestedMode;
-  applyThemeMode();
-  persistState();
-  render();
-});
+for (const button of themeModeButtons) {
+  button.addEventListener("click", () => {
+    const requestedMode = button.dataset.themeMode;
+    if (!THEME_MODES.has(requestedMode)) {
+      return;
+    }
+    state.themeMode = requestedMode;
+    applyThemeMode();
+    persistState();
+    render();
+  });
+}
 
 document.addEventListener("pointerdown", (event) => {
   const target = event.target;
@@ -245,13 +255,16 @@ for (const header of sortableHeaders) {
 
 settingsForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  syncConfigFromInputs();
+  if (syncConfigFromInputs()) {
+    closeApiKeyDialog();
+    render();
+  }
 });
 
 addUrlForm.addEventListener("submit", (event) => {
   event.preventDefault();
 
-  if (!syncConfigFromInputs()) {
+  if (!ensureApiKeyConfigured()) {
     return;
   }
 
@@ -294,8 +307,35 @@ shopifyPbAction?.addEventListener("click", (event) => {
   urlInput.focus();
 });
 
+openSettingsButton?.addEventListener("click", () => {
+  openApiKeyDialog();
+});
+
+apiKeyDialogCloseButton?.addEventListener("click", () => {
+  closeApiKeyDialog();
+});
+
+apiKeyDialog?.addEventListener("click", (event) => {
+  if (event.target === apiKeyDialog) {
+    closeApiKeyDialog();
+  }
+});
+
+apiKeyDialog?.addEventListener("close", () => {
+  apiKeyInput.value = state.apiKey;
+  updateApiKeyUi();
+});
+
+clearApiKeyButton?.addEventListener("click", () => {
+  state.apiKey = "";
+  apiKeyInput.value = "";
+  persistState();
+  render();
+  apiKeyInput.focus();
+});
+
 startAllButton.addEventListener("click", () => {
-  if (!syncConfigFromInputs()) {
+  if (!ensureApiKeyConfigured()) {
     return;
   }
 
@@ -358,7 +398,8 @@ function syncConfigFromInputs() {
   const key = apiKeyInput.value.trim();
 
   if (!key) {
-    window.alert("Google API key is required.");
+    apiKeyInput.focus();
+    apiKeyInput.reportValidity();
     return false;
   }
 
@@ -367,6 +408,55 @@ function syncConfigFromInputs() {
 
   persistState();
   return true;
+}
+
+function hasApiKey() {
+  return Boolean(state.apiKey.trim());
+}
+
+function openApiKeyDialog() {
+  if (!apiKeyDialog) {
+    return;
+  }
+  apiKeyInput.value = state.apiKey;
+  if (!apiKeyDialog.open) {
+    apiKeyDialog.showModal();
+  }
+  requestAnimationFrame(() => {
+    apiKeyInput.focus();
+    apiKeyInput.select();
+  });
+}
+
+function closeApiKeyDialog() {
+  if (apiKeyDialog?.open) {
+    apiKeyDialog.close();
+  }
+}
+
+function ensureApiKeyConfigured() {
+  if (hasApiKey()) {
+    return true;
+  }
+  openApiKeyDialog();
+  return false;
+}
+
+function updateApiKeyUi() {
+  const configured = hasApiKey();
+  if (apiKeyStatus) {
+    apiKeyStatus.textContent = configured ? "Saved" : "Not set";
+  }
+  openSettingsButton?.classList.toggle("is-configured", configured);
+  if (setupHint) {
+    setupHint.textContent = configured
+      ? "Runs use your saved key from this browser."
+      : "Add your Google PageSpeed API key before the first run.";
+    setupHint.classList.toggle("is-ready", configured);
+  }
+  if (clearApiKeyButton) {
+    clearApiKeyButton.disabled = !configured;
+  }
 }
 
 function createTracker(url) {
@@ -2490,6 +2580,7 @@ function render() {
   }
   try {
     updateClearAllButtonState();
+    updateApiKeyUi();
     if (toggleDetailsButton) {
       toggleDetailsButton.textContent = state.showDetails ? "Hide Details" : "Show Details";
       toggleDetailsButton.setAttribute("aria-label", state.showDetails ? "Hide Details" : "Show Details");
@@ -2522,9 +2613,26 @@ function renderCards(renderContext) {
   urlCardsContainer.innerHTML = "";
 
   if (!state.trackers.size) {
-    const empty = document.createElement("p");
-    empty.className = "placeholder";
-    empty.textContent = "No URLs are being tracked.";
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    const title = document.createElement("h3");
+    title.textContent = "No tracked URLs yet";
+    const copy = document.createElement("p");
+    copy.textContent = hasApiKey()
+      ? "Add a URL above to start collecting mobile and desktop samples."
+      : "Save your API key, then add a URL to begin collecting samples.";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = hasApiKey() ? "secondary" : "";
+    button.textContent = hasApiKey() ? "Focus URL Field" : "Add API Key";
+    button.addEventListener("click", () => {
+      if (hasApiKey()) {
+        urlInput.focus();
+        return;
+      }
+      openApiKeyDialog();
+    });
+    empty.append(title, copy, button);
     urlCardsContainer.append(empty);
     return;
   }
@@ -2709,7 +2817,7 @@ function renderCards(renderContext) {
     runNowButton.dataset.tooltip = tracker.running ? "Run now" : "Run once";
     attachTooltipHandlers(runNowButton);
     runNowButton.addEventListener("click", () => {
-      if (!syncConfigFromInputs()) {
+      if (!ensureApiKeyConfigured()) {
         return;
       }
       triggerImmediateCycle(tracker);
