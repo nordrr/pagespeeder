@@ -9,5 +9,8 @@
   },
   "devDependencies": {
     "vite": "^5.4.14"
+  },
+  "dependencies": {
+    "glimm": "^0.1.3"
   }
 }

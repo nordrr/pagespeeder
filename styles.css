@@ -328,6 +328,112 @@ body.url-dragging * {
   font-weight: 500;
 }
 
+.theme-sweep-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  mix-blend-mode: normal;
+}
+
+.glimm-dev-panel {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 900;
+  width: min(420px, calc(100vw - 36px));
+  max-height: min(680px, calc(100vh - 36px));
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--panel) 86%, transparent);
+  box-shadow: 0 26px 70px rgb(15 23 42 / 0.22), 0 1px 0 rgb(255 255 255 / 0.54) inset;
+  backdrop-filter: blur(26px) saturate(1.35);
+}
+
+:root[data-theme="dark"] .glimm-dev-panel {
+  box-shadow: 0 26px 70px rgb(0 0 0 / 0.45), 0 1px 0 rgb(255 255 255 / 0.08) inset;
+}
+
+.glimm-dev-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.glimm-dev-header h2 {
+  margin: 1px 0 0;
+  font-size: 1.05rem;
+}
+
+.glimm-dev-header .eyebrow {
+  margin-bottom: 0;
+}
+
+.glimm-dev-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.glimm-dev-grid label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.glimm-dev-grid label > span {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.glimm-dev-grid output {
+  color: var(--text);
+  font-family: "Roboto Mono", monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.glimm-dev-grid select,
+.glimm-dev-grid input[type="range"] {
+  width: 100%;
+}
+
+.glimm-dev-grid select {
+  min-height: 34px;
+  border-radius: 10px;
+  font-size: 0.83rem;
+}
+
+.glimm-dev-grid input[type="range"] {
+  accent-color: var(--accent);
+}
+
+.glimm-autoplay-toggle {
+  width: 100%;
+  margin-top: 12px;
+}
+
+.glimm-autoplay-toggle.is-active {
+  background: color-mix(in srgb, var(--accent) 18%, var(--button-secondary-bg));
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--button-secondary-border));
+  color: var(--accent-strong);
+}
+
 main {
   display: grid;
   gap: 16px;
@@ -1759,6 +1865,17 @@ body.run-detail-open .run-detail-panel {
 @media (max-width: 720px) {
   main {
     padding: 10px;
+  }
+
+  .glimm-dev-panel {
+    right: 10px;
+    bottom: 10px;
+    width: calc(100vw - 20px);
+    max-height: min(520px, calc(100vh - 20px));
+  }
+
+  .glimm-dev-grid {
+    grid-template-columns: 1fr;
   }
 
   .page-header {
