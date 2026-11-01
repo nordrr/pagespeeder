@@ -141,10 +141,13 @@ const setupHint = document.getElementById("setup-hint");
 const apiKeyDialog = document.getElementById("api-key-dialog");
 const apiKeyDialogCloseButton = document.getElementById("api-key-dialog-close");
 const clearApiKeyButton = document.getElementById("clear-api-key");
+const saveApiKeyButton = settingsForm?.querySelector('button[type="submit"]');
 const runDetailBackdrop = document.getElementById("run-detail-backdrop");
 const runDetailPanel = document.getElementById("run-detail-panel");
 const runDetailCloseButton = document.getElementById("run-detail-close");
 const runDetailContent = document.getElementById("run-detail-content");
+const pageHeaderElement = document.querySelector(".page-header");
+const mainContentElement = document.querySelector("main");
 const uiTooltip = document.getElementById("ui-tooltip");
 const SORTABLE_KEYS = new Set(["url", "mode", "avgScore", "confidence", "samples", "fcp", "si", "lcp", "tbt", "cls"]);
 const TOOLTIP_DELAY_MS = 250;
@@ -169,6 +172,8 @@ let dragDidDrop = false;
 let dragEndCleanupTimerId = null;
 let transparentDragImage = null;
 let pendingLabelEditUrl = null;
+let pendingAddUrlAfterKey = null;
+let runDetailReturnFocusElement = null;
 let suppressLabelBlurCommit = false;
 let skipLabelEditRestoreOnNextRender = false;
 let clearAllConfirmArmed = false;
@@ -490,8 +495,16 @@ runDetailBackdrop?.addEventListener("click", () => {
   closeRunDetailPanel();
 });
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && state.runDetail) {
+  if (!state.runDetail) {
+    return;
+  }
+  if (event.key === "Escape") {
+    event.preventDefault();
     closeRunDetailPanel();
+    return;
+  }
+  if (event.key === "Tab") {
+    trapFocusInRunDetail(event);
   }
 });
 document.addEventListener("dragover", (event) => {
@@ -591,17 +604,19 @@ for (const header of sortableHeaders) {
 settingsForm.addEventListener("submit", (event) => {
   event.preventDefault();
   if (syncConfigFromInputs()) {
+    const pendingUrl = pendingAddUrlAfterKey;
+    pendingAddUrlAfterKey = null;
     closeApiKeyDialog();
-    render();
+    if (pendingUrl) {
+      addTrackerAndStart(pendingUrl);
+    } else {
+      render();
+    }
   }
 });
 
 addUrlForm.addEventListener("submit", (event) => {
   event.preventDefault();
-
-  if (!ensureApiKeyConfigured()) {
-    return;
-  }
 
   const cleanedUrl = normalizeUrl(urlInput.value.trim());
   if (!cleanedUrl) {
@@ -611,6 +626,22 @@ addUrlForm.addEventListener("submit", (event) => {
 
   if (state.trackers.has(cleanedUrl)) {
     window.alert("This URL is already being tracked.");
+    return;
+  }
+
+  if (!hasApiKey()) {
+    openApiKeyDialog({ pendingUrl: cleanedUrl });
+    return;
+  }
+
+  addTrackerAndStart(cleanedUrl);
+});
+
+function addTrackerAndStart(cleanedUrl) {
+  if (!cleanedUrl || state.trackers.has(cleanedUrl)) {
+    if (state.trackers.has(cleanedUrl)) {
+      window.alert("This URL is already being tracked.");
+    }
     return;
   }
 
@@ -625,7 +656,7 @@ addUrlForm.addEventListener("submit", (event) => {
     updateShopifyPbSuggestion();
     render();
   });
-});
+}
 
 urlInput?.addEventListener("input", () => {
   updateShopifyPbSuggestion();
@@ -657,6 +688,7 @@ apiKeyDialog?.addEventListener("click", (event) => {
 });
 
 apiKeyDialog?.addEventListener("close", () => {
+  pendingAddUrlAfterKey = null;
   apiKeyInput.value = state.apiKey;
   updateApiKeyUi();
 });
@@ -749,11 +781,15 @@ function hasApiKey() {
   return Boolean(state.apiKey.trim());
 }
 
-function openApiKeyDialog() {
+function openApiKeyDialog(options = {}) {
   if (!apiKeyDialog) {
     return;
   }
+  pendingAddUrlAfterKey = options.pendingUrl || null;
   apiKeyInput.value = state.apiKey;
+  if (saveApiKeyButton) {
+    saveApiKeyButton.textContent = pendingAddUrlAfterKey ? "Save Key & Start" : "Save Key";
+  }
   if (!apiKeyDialog.open) {
     apiKeyDialog.showModal();
   }
@@ -1877,12 +1913,18 @@ function createMetricValueBlock(
 
   const pointsLine = document.createElement("span");
   pointsLine.className = "metric-points-line";
+  const contributionTooltip = `${SCORING_MODEL_VERSION} weighted contribution to the 100-point performance score. The measured metric is shown underneath.`;
+  pointsLine.dataset.tooltip = contributionTooltip;
+  pointsLine.title = contributionTooltip;
+  pointsLine.setAttribute(
+    "aria-label",
+    `${contribution.points} out of ${contribution.outOf.replace("/", "")} weighted points. ${metric.format(value)} measured.`,
+  );
+  attachTooltipHandlers(pointsLine);
 
   const pointsBig = document.createElement("span");
   pointsBig.className = "metric-points-big";
   pointsBig.textContent = contribution.points;
-  pointsBig.title = `${SCORING_MODEL_VERSION} metric contribution`;
-
   const pointsSmall = document.createElement("span");
   pointsSmall.className = "metric-points-small";
   pointsSmall.textContent = contribution.outOf;
@@ -2456,7 +2498,6 @@ function renderPendingCell(cell, status) {
 }
 
 function renderScoreCell(cell, sample, mode, renderContext, tracker, rowData) {
-  cell.onclick = null;
   cell.style.cursor = "";
 
   if (!sample) {
@@ -2478,19 +2519,19 @@ function renderScoreCell(cell, sample, mode, renderContext, tracker, rowData) {
   cell.className = mode === "mobile" ? "score-cell-mobile" : "score-cell-desktop";
   cell.style.backgroundColor = background;
   cell.style.color = textColorForBackground(background);
-  cell.style.cursor = "pointer";
   cell.innerHTML = "";
-
-  const openDetail = () => {
-    openRunDetailPanel(tracker, mode, sample, rowData.runNumber);
-  };
-  cell.addEventListener("click", openDetail);
 
   const button = document.createElement("button");
   button.type = "button";
   button.className = "run-score-button";
   button.textContent = score.toFixed(0);
-  button.tabIndex = -1;
+  button.setAttribute(
+    "aria-label",
+    `Open run ${rowData.runNumber} ${mode} score ${score.toFixed(0)} details`,
+  );
+  button.addEventListener("click", () => {
+    openRunDetailPanel(tracker, mode, sample, rowData.runNumber, button);
+  });
 
   cell.append(button);
 }
@@ -2716,12 +2757,57 @@ function getAllRunScorePopulation() {
   return values;
 }
 
-function closeRunDetailPanel() {
-  state.runDetail = null;
-  renderRunDetailPanel();
+function setRunDetailModalState(isOpen) {
+  if (pageHeaderElement) {
+    pageHeaderElement.inert = isOpen;
+  }
+  if (mainContentElement) {
+    mainContentElement.inert = isOpen;
+  }
 }
 
-function openRunDetailPanel(tracker, mode, sample, runNumber) {
+function trapFocusInRunDetail(event) {
+  if (!runDetailPanel) {
+    return;
+  }
+  const focusable = Array.from(
+    runDetailPanel.querySelectorAll('button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'),
+  ).filter((element) => element instanceof HTMLElement && element.offsetParent !== null);
+  if (!focusable.length) {
+    event.preventDefault();
+    runDetailPanel.focus();
+    return;
+  }
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  } else if (!runDetailPanel.contains(document.activeElement)) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+function closeRunDetailPanel() {
+  const returnFocus = runDetailReturnFocusElement;
+  runDetailReturnFocusElement = null;
+  state.runDetail = null;
+  renderRunDetailPanel();
+  requestAnimationFrame(() => {
+    if (returnFocus instanceof HTMLElement && returnFocus.isConnected) {
+      returnFocus.focus({ preventScroll: true });
+    }
+  });
+}
+
+function openRunDetailPanel(tracker, mode, sample, runNumber, returnFocus = null) {
+  runDetailReturnFocusElement = returnFocus instanceof HTMLElement
+    ? returnFocus
+    : (document.activeElement instanceof HTMLElement ? document.activeElement : null);
   state.runDetail = {
     url: tracker.url,
     label: tracker.label || "",
@@ -2730,6 +2816,9 @@ function openRunDetailPanel(tracker, mode, sample, runNumber) {
     runNumber,
   };
   renderRunDetailPanel();
+  requestAnimationFrame(() => {
+    runDetailCloseButton?.focus({ preventScroll: true });
+  });
 }
 
 function renderRunDetailPanel() {
@@ -2739,6 +2828,7 @@ function renderRunDetailPanel() {
 
   if (!state.runDetail) {
     document.body.classList.remove("run-detail-open");
+    setRunDetailModalState(false);
     runDetailPanel.setAttribute("aria-hidden", "true");
     runDetailContent.innerHTML = "";
     const placeholder = document.createElement("p");
@@ -2749,6 +2839,7 @@ function renderRunDetailPanel() {
   }
 
   document.body.classList.add("run-detail-open");
+  setRunDetailModalState(true);
   runDetailPanel.setAttribute("aria-hidden", "false");
   runDetailContent.innerHTML = "";
 
@@ -2833,6 +2924,9 @@ function renderRunDetailPanel() {
         const percent = (contribution.points / contribution.maxPoints) * 100;
         pointsCell.style.backgroundColor = percentileColor(percent);
         pointsCell.style.color = textColorForBackground(pointsCell.style.backgroundColor);
+        pointsCell.dataset.tooltip = `${SCORING_MODEL_VERSION} weighted contribution to the 100-point performance score.`;
+        pointsCell.title = pointsCell.dataset.tooltip;
+        attachTooltipHandlers(pointsCell);
       } else {
         pointsCell.textContent = "--";
       }
@@ -2914,6 +3008,13 @@ function render() {
     active.blur();
   }
   try {
+    const hasTrackers = state.trackers.size > 0;
+    startAllButton.hidden = !hasTrackers;
+    stopAllButton.hidden = !hasTrackers;
+    if (toggleDetailsButton) {
+      toggleDetailsButton.hidden = !hasTrackers;
+    }
+    clearAllButton.hidden = !hasTrackers;
     updateClearAllButtonState();
     updateApiKeyUi();
     if (toggleDetailsButton) {
@@ -2977,9 +3078,10 @@ function renderCards(renderContext) {
 
   for (const tracker of getOrderedTrackers()) {
     const card = urlCardTemplate.content.firstElementChild.cloneNode(true);
+    const isBaseCard = state.comparisonBaseUrl === tracker.url;
     card.dataset.url = tracker.url;
     card.style.viewTransitionName = viewTransitionNameForUrl(tracker.url);
-    card.classList.toggle("comparison-base", state.comparisonBaseUrl === tracker.url);
+    card.classList.toggle("comparison-base", isBaseCard);
 
     const title = card.querySelector(".url-card-title");
     const dragHandle = card.querySelector(".drag-handle");
@@ -3002,6 +3104,12 @@ function renderCards(renderContext) {
 
     const hasLabel = Boolean(tracker.label && tracker.label.trim());
     labelLine.textContent = hasLabel ? tracker.label : "Add a label";
+    if (isBaseCard) {
+      const baselineBadge = document.createElement("span");
+      baselineBadge.className = "baseline-badge";
+      baselineBadge.textContent = "Baseline";
+      labelLine.append(baselineBadge);
+    }
     urlLine.textContent = tracker.url;
     title.classList.toggle("no-label", !hasLabel);
     title.dataset.tooltip = hasLabel ? "Edit label" : "Add label";
@@ -3158,7 +3266,6 @@ function renderCards(renderContext) {
       triggerImmediateCycle(tracker);
     });
 
-    const isBaseCard = state.comparisonBaseUrl === tracker.url;
     if (setBaselineButton) {
       setBaselineButton.innerHTML = ICON_BASELINE;
       setBaselineButton.classList.toggle("is-active", isBaseCard);

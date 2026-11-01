@@ -898,12 +898,32 @@ button.remove-confirm:disabled {
 }
 
 .url-label-line {
-  display: block;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
   font-weight: 700;
   font-size: 1rem;
   line-height: 1.15;
   word-break: break-word;
   transition: transform 120ms ease;
+}
+
+.baseline-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 2px 6px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-family: var(--font-sans);
+  font-size: 0.61rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .title-row:hover .url-label-line,
@@ -1269,6 +1289,7 @@ html {
   display: inline-flex;
   align-items: baseline;
   gap: 3px;
+  cursor: help;
 }
 
 .metric-points-big {
@@ -1428,7 +1449,7 @@ html {
   font-size: 0.7rem;
   font-weight: 700;
   padding: 0;
-  cursor: inherit;
+  cursor: pointer;
   box-shadow: none;
   border-radius: 0;
 }
@@ -1702,6 +1723,7 @@ body.run-detail-open .run-detail-panel {
   overflow-y: auto;
   padding: 12px 14px 20px;
   display: grid;
+  align-content: start;
   gap: 10px;
 }
 
@@ -1951,6 +1973,13 @@ body.run-detail-open .run-detail-panel {
     position: static;
     margin-top: 4px;
     justify-self: start;
+    gap: 6px;
+  }
+
+  .url-card .icon-btn {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
   }
 
   .title-row,
