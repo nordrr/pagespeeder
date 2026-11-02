@@ -1,0 +1,32 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { createSiteDetailsView } from "./site-details.mjs";
+
+test("coalesces header sizing and aligns visible identities only on a multi-column row", (t) => {
+  const oldWindow = globalThis.window;
+  const oldRaf = globalThis.requestAnimationFrame;
+  const oldCancel = globalThis.cancelAnimationFrame;
+  t.after(() => { globalThis.window = oldWindow; globalThis.requestAnimationFrame = oldRaf; globalThis.cancelAnimationFrame = oldCancel; });
+  let mobile = false;
+  globalThis.window = { matchMedia: () => ({ matches: mobile }) };
+  let nextId = 0;
+  const callbacks = new Map();
+  globalThis.requestAnimationFrame = (fn) => { callbacks.set(++nextId, fn); return nextId; };
+  globalThis.cancelAnimationFrame = (id) => callbacks.delete(id);
+  const element = (top, height) => ({ offsetParent: {}, style: { minHeight: "old" }, getBoundingClientRect: () => ({ top, height }) });
+  const headers = [element(0, 0)];
+  const identities = [element(0, 32.1), element(0, 45.3)];
+  const cards = [element(10, 0), element(10, 0)];
+  const container = { querySelectorAll: (selector) => ({ ".url-card > header": headers, ".url-identity": identities, ".url-card[data-url]": cards })[selector] };
+  const view = createSiteDetailsView({ urlCardsContainer: container });
+  view.scheduleHeaderHeightSync();
+  view.scheduleHeaderHeightSync();
+  assert.equal(callbacks.size, 1);
+  [...callbacks.values()][0]();
+  assert.equal(headers[0].style.minHeight, "");
+  assert.deepEqual(identities.map((el) => el.style.minHeight), ["46px", "46px"]);
+  mobile = true;
+  view.scheduleHeaderHeightSync();
+  callbacks.get(nextId)();
+  assert.deepEqual(identities.map((el) => el.style.minHeight), ["", ""]);
+});

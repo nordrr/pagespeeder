@@ -54,3 +54,17 @@ npm run preview
 ```
 
 The build is written to `dist/` and can be hosted as a static site.
+
+## Development
+
+Run the focused tests with `npm test`. They cover the PageSpeed response parser, scheduling, scoring and statistics, backup compatibility, and selected view behavior.
+
+`app.js` connects the app's state, event handlers, and view controllers. The main pieces live in `src/`:
+
+- `tracking/` handles PageSpeed requests and report scheduling.
+- `metrics.mjs`, `statistics.mjs`, and `lighthouse-scoring.mjs` define metrics and calculations.
+- `state.mjs`, `storage.mjs`, and `backup.mjs` manage defaults, browser persistence, and backup files.
+- `views/` renders the site list, site details, score runs, run details, and comparison table.
+- `ui/` contains navigation, theme transitions, tooltips, and connected pane outlines.
+
+The workspace stylesheets are loaded in order after `styles.css`: `workspace.css`, `workspace-site-interactions.css`, `workspace-components.css`, and `workspace-details.css`. Their order matters because later rules refine earlier styles.

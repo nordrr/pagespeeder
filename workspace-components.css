@@ -1,0 +1,106 @@
+/* A consistent semibold weight gives controls a little more presence. */
+button { font-weight: 600; }
+.workspace-tab, .site-action { font-weight: 600; }
+/* Soft pill controls and gently elevated surfaces, informed by HeroUI. */
+button:not(.workspace-tab):not(.site-item):not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(.drag-handle),
+.site-menu summary { border-radius: 999px; }
+button:not(.workspace-tab):not(.site-item):not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(.drag-handle):focus-visible,
+.site-menu summary:focus-visible { outline-offset: 2px; }
+.site-action, .site-menu summary { min-width: 34px; height: 34px; }
+.url-card .url-card-actions .icon-btn { height: 36px; padding-inline: 13px; }
+.library-bulk-actions button, .header-actions > button { min-height: 36px; padding-inline: 13px; }
+#api-key-dialog-close { width: 32px; height: 32px; }
+#add-url-form { min-height: 56px; padding: 6px; gap: 6px; border-radius: 999px; box-shadow: 0 2px 5px rgb(16 24 40 / .08), 0 1px 2px rgb(16 24 40 / .04); }
+#add-url-form > label { min-width: 0; }
+#add-url-form input { min-width: 0; height: 42px; padding: 0 14px; border-radius: 999px; }
+#add-url-form > button[type='submit'] { min-height: 42px; padding: 9px 20px; border-radius: 999px; }
+#add-url-form:has(#shopify-pb-suggestion:not([hidden])) { border-radius: 26px; }
+#shopify-pb-suggestion { margin: 0 14px 7px; }
+.library-search input, #api-key-dialog input { border-radius: 999px; }
+.settings-dialog { border-radius: 24px; }
+.api-key-info, .site-menu-items { border-radius: 16px; }
+.site-menu-items .site-action { border-radius: 999px; }
+.url-card-content, .comparison-view .table-wrap, .empty-state { border-radius: 20px; box-shadow: var(--panel-shadow); }
+.summary-tile { border-radius: 15px; }
+.site-score-track, .site-score-fill { border-radius: 999px; }
+@media (max-width: 600px) {
+ .site-action, .site-menu summary { min-width: 30px; height: 30px; }
+ .header-actions > button { min-height: 32px; padding-inline: 7px; }
+ #add-url-form > button[type='submit'] { padding-inline: 14px; }
+}
+/* Lucide's rounded outline icons at a larger size within the existing controls. */
+.workspace-tab svg.lucide { width: 22px; height: 22px; }
+.site-icon svg.lucide { width: 23px; height: 23px; }
+.site-action svg.lucide, .url-card-actions .icon-btn svg.lucide, .theme-mode-button svg.lucide, #api-key-dialog-close svg.lucide, .comparison-url-content svg.lucide { width: 18px; height: 18px; flex: 0 0 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+@media (max-width: 600px) {
+ .workspace-tab svg.lucide { width: 19px; height: 19px; }
+ .site-icon svg.lucide { width: 20px; height: 20px; }
+ .site-action svg.lucide, .theme-mode-button svg.lucide { width: 17px; height: 17px; flex-basis: 17px; }
+}
+/* HeroUI primary-table geometry: muted shell, padded header and rounded body. */
+.metric-table-wrap, .score-history-scroll, .run-detail-table-wrap, .comparison-view .table-wrap { min-width: 0; background: var(--surface-muted); padding: 0 4px 4px; border: 0; border-radius: 20px; box-shadow: none; }
+.metric-table-wrap, .run-detail-table-wrap { overflow-x: auto; }
+.score-history-scroll { max-height: 260px; overflow: auto; }
+.metric-summary-table, .score-history-table, .run-detail-metric-table, #comparison-table { border-collapse: separate; border-spacing: 0; }
+.metric-summary-table th, .score-history-table th, .run-detail-metric-table th, #comparison-table th { position: sticky; top: 0; padding: 10px 16px; background: var(--surface-muted); border: 0; color: var(--muted); font-family: var(--font-sans); font-size: 12px; font-weight: 500; white-space: nowrap; }
+.metric-summary-table th:not(:last-child)::before, .score-history-table th:not(:last-child)::before, .run-detail-metric-table th:not(:last-child)::before, #comparison-table th:not(:last-child)::before { content: ''; position: absolute; right: 0; top: 50%; width: 1px; height: 16px; transform: translateY(-50%); background: var(--border); }
+.metric-summary-table td, .score-history-table td, .run-detail-metric-table td, #comparison-table td { padding: 12px 16px; background-color: var(--canvas); border-bottom: 1px solid var(--border); font-size: 12px; vertical-align: middle; }
+.metric-summary-table tbody tr:first-child td:first-child, .score-history-table tbody tr:first-child td:first-child, .run-detail-metric-table tbody tr:first-child td:first-child, #comparison-table tbody tr:first-child td:first-child { border-top-left-radius: 16px; }
+.metric-summary-table tbody tr:first-child td:last-child, .score-history-table tbody tr:first-child td:last-child, .run-detail-metric-table tbody tr:first-child td:last-child, #comparison-table tbody tr:first-child td:last-child { border-top-right-radius: 16px; }
+.metric-summary-table tbody tr:last-child td:first-child, .score-history-table tbody tr:last-child td:first-child, .run-detail-metric-table tbody tr:last-child td:first-child, #comparison-table tbody tr:last-child td:first-child { border-bottom-left-radius: 16px; }
+.metric-summary-table tbody tr:last-child td:last-child, .score-history-table tbody tr:last-child td:last-child, .run-detail-metric-table tbody tr:last-child td:last-child, #comparison-table tbody tr:last-child td:last-child { border-bottom-right-radius: 16px; }
+.metric-summary-table tbody tr:last-child td, .score-history-table tbody tr:last-child td, .run-detail-metric-table tbody tr:last-child td, #comparison-table tbody tr:last-child td { border-bottom: 0; }
+
+/* Let the site rows pass behind the floating add form, with room to reach the last row. */
+.site-library { --add-panel-height: 84px; }
+.site-list { padding-bottom: calc(var(--add-panel-height) + 12px); }
+@media (min-width: 901px) {
+ .library-section-label { margin-bottom: 0; }
+ .site-list { padding-top: 18px; }
+}
+.library-add { position: absolute; z-index: 5; inset: auto 0 0; pointer-events: none; }
+.library-add-blur { position: absolute; inset: -36px 0 0; pointer-events: none; }
+.library-add-blur span { position: absolute; inset: 0; clip-path: inset(calc(var(--step) * 6.25%) 0 calc((15 - var(--step)) * 6.25%) 0); backdrop-filter: blur(var(--blur)); -webkit-backdrop-filter: blur(var(--blur)); }
+.library-add-blur span:nth-child(1) { --step: 0; --blur: .15px; }
+.library-add-blur span:nth-child(2) { --step: 1; --blur: .3px; }
+.library-add-blur span:nth-child(3) { --step: 2; --blur: .45px; }
+.library-add-blur span:nth-child(4) { --step: 3; --blur: .6px; }
+.library-add-blur span:nth-child(5) { --step: 4; --blur: .8px; }
+.library-add-blur span:nth-child(6) { --step: 5; --blur: 1px; }
+.library-add-blur span:nth-child(7) { --step: 6; --blur: 1.3px; }
+.library-add-blur span:nth-child(8) { --step: 7; --blur: 1.6px; }
+.library-add-blur span:nth-child(9) { --step: 8; --blur: 2px; }
+.library-add-blur span:nth-child(10) { --step: 9; --blur: 2.5px; }
+.library-add-blur span:nth-child(11) { --step: 10; --blur: 3px; }
+.library-add-blur span:nth-child(12) { --step: 11; --blur: 3.7px; }
+.library-add-blur span:nth-child(13) { --step: 12; --blur: 4.5px; }
+.library-add-blur span:nth-child(14) { --step: 13; --blur: 5.5px; }
+.library-add-blur span:nth-child(15) { --step: 14; --blur: 6.5px; }
+.library-add-blur span:nth-child(16) { --step: 15; --blur: 8px; }
+.library-add form { position: relative; pointer-events: auto; }
+@media (min-width: 901px) {
+ main { position: fixed; top: 64px; right: 0; bottom: 0; left: 0; margin-top: 0; min-height: 0; overflow-y: auto; }
+}
+.score-history-table th:first-child, .score-history-table td:first-child { min-width: 0; }
+.score-history-table td.score-cell-mobile, .score-history-table td.score-cell-desktop { position: relative; height: 42px; padding: 0; text-align: center; }
+.score-history-table td.score-cell-pending { padding: 0; }
+.score-history-table .run-score-button { position: absolute; inset: 0; display: flex; width: 100%; height: 100%; min-height: 0; padding: 0; border-radius: 0; font-size: 12px; background: transparent; }
+.run-score-pill { display: inline-flex; align-items: center; justify-content: center; min-width: 50px; min-height: 30px; padding: 5px 10px; border-radius: 999px; }
+/* Size the history to the workspace rather than the old collapsed card. */
+.score-history-scroll { max-height: max(260px, calc(100dvh - 340px)); overscroll-behavior-y: contain; overscroll-behavior-x: auto; }
+.details-section { align-content: start; }
+.url-card-content { align-items: start; }
+@media (min-width: 1301px) {
+ .url-card-content { align-items: stretch; }
+ .details-section { display: flex; flex-direction: column; align-items: stretch; }
+ .metric-table-wrap { flex: 1; }
+ .metric-summary-table { height: 100%; }
+}
+@media (max-width: 1300px) {
+ .score-history-scroll { max-height: min(55dvh, 560px); }
+}
+@media (max-width: 600px) {
+ .metric-summary-table th, .score-history-table th, .run-detail-metric-table th, #comparison-table th { padding: 10px 8px; }
+ .metric-summary-table td, .score-history-table td, .run-detail-metric-table td, #comparison-table td { padding: 12px 8px; }
+}
+
