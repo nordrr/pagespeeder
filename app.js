@@ -11,14 +11,19 @@ import sunSvg from "lucide-static/icons/sun.svg?raw";
 import moonSvg from "lucide-static/icons/moon.svg?raw";
 import closeSvg from "lucide-static/icons/x.svg?raw";
 import ellipsisSvg from "lucide-static/icons/ellipsis.svg?raw";
+import settingsSvg from "lucide-static/icons/settings.svg?raw";
 
 const iconMarkup = (svg) => svg.replace("<svg", '<svg aria-hidden="true"');
 for (const [selector, icon] of [
   ['.workspace-tab[data-view="sites"] svg', dashboardSvg],
   ['.workspace-tab[data-view="comparison"] svg', chartSvg],
+  ['.workspace-tab[data-view="settings"] svg', settingsSvg],
   ['.theme-mode-button[data-theme-mode="auto"] svg', monitorSvg],
   ['.theme-mode-button[data-theme-mode="light"] svg', sunSvg],
   ['.theme-mode-button[data-theme-mode="dark"] svg', moonSvg],
+  ['[data-setting-theme="auto"] svg', monitorSvg],
+  ['[data-setting-theme="light"] svg', sunSvg],
+  ['[data-setting-theme="dark"] svg', moonSvg],
   ['#api-key-dialog-close svg', closeSvg],
 ]) {
   const original = document.querySelector(selector);
@@ -47,8 +52,6 @@ const GLIMM_EASINGS = new Set([
 const GLIMM_DEV_SETTINGS_VERSION = 2;
 const FIXED_POLL_INTERVAL_SEC = 60;
 const SCORING_MODEL_VERSION = "v10";
-const TARGET_CI_HALF_WIDTH_POINTS = 2;
-const SECONDARY_CI_HALF_WIDTH_POINTS = 1;
 const MIN_STAT_SIG_SAMPLES = 10;
 const LH_V10_CURVES = {
   mobile: {
@@ -108,6 +111,7 @@ const METRICS = [
 const state = {
   apiKey: "",
   pollIntervalSec: FIXED_POLL_INTERVAL_SEC,
+  autoPauseTarget: 2,
   trackers: new Map(),
   trackerOrder: [],
   comparisonBaseUrl: null,
@@ -166,6 +170,9 @@ const bulkActionDescription = document.getElementById("bulk-action-description")
 const bulkActionConfirm = document.getElementById("bulk-action-confirm");
 const toggleDetailsButton = document.getElementById("toggle-details");
 const themeModeButtons = Array.from(document.querySelectorAll(".theme-mode-button[data-theme-mode]"));
+const settingsThemeButtons = Array.from(document.querySelectorAll("[data-setting-theme]"));
+const settingsThemeOptions = document.getElementById("settings-theme-options");
+const autoPauseTargetInput = document.getElementById("auto-pause-target");
 const glimmDevPanel = document.getElementById("glimm-dev-panel");
 const glimmDevFields = Array.from(document.querySelectorAll("[data-glimm-setting]"));
 const glimmDevPreviewButton = document.getElementById("glimm-dev-preview");
@@ -219,6 +226,7 @@ let suppressLabelBlurCommit = false;
 let skipLabelEditRestoreOnNextRender = false;
 let pendingBulkAction = null;
 let pendingSiteRemovalUrl = null;
+let pendingImport = null;
 let themeSweepController = null;
 let themeSweepHandle = null;
 let themeSweepShaderType = null;
@@ -247,6 +255,19 @@ function applyThemeMode() {
     button.classList.toggle("is-active", isActive);
     button.setAttribute("aria-pressed", String(isActive));
   }
+  for (const button of settingsThemeButtons) {
+    const active = button.dataset.settingTheme === mode;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  }
+  positionSettingsThemeIndicator();
+}
+
+function positionSettingsThemeIndicator() {
+  const active = settingsThemeButtons.find((button) => button.dataset.settingTheme === state.themeMode);
+  if (!active || !active.offsetWidth) return;
+  settingsThemeOptions.style.setProperty("--indicator-left", `${active.offsetLeft}px`);
+  settingsThemeOptions.style.setProperty("--indicator-width", `${active.offsetWidth}px`);
 }
 
 function prefersReducedMotion() {
@@ -529,6 +550,7 @@ runDetailCloseButton?.addEventListener("click", () => {
 });
 colorModeButton.dataset.tooltip = document.getElementById("color-mode-description").textContent;
 attachTooltipHandlers(colorModeButton);
+themeModeButtons.forEach(attachTooltipHandlers);
 colorModeButton.addEventListener("click", () => {
   state.colorMode = state.colorMode === "absolute" ? "relative" : "absolute";
   persistState();
@@ -582,6 +604,14 @@ for (const button of themeModeButtons) {
     setThemeModeWithSweep(requestedMode);
   });
 }
+for (const button of settingsThemeButtons) {
+  button.addEventListener("click", () => setThemeModeWithSweep(button.dataset.settingTheme));
+}
+autoPauseTargetInput.addEventListener("change", () => {
+  state.autoPauseTarget = autoPauseTargetInput.value === "off" ? null : Number(autoPauseTargetInput.value);
+  persistState();
+  render();
+});
 for (const field of glimmDevFields) {
   field.addEventListener("input", () => updateGlimmDevSetting(field));
   field.addEventListener("change", () => updateGlimmDevSetting(field));
@@ -792,7 +822,7 @@ function openRemoveSiteDialog(tracker) {
 clearRunsButton.addEventListener("click", () => openBulkActionDialog("clear-runs"));
 deleteAllSitesButton.addEventListener("click", () => openBulkActionDialog("delete-sites"));
 document.getElementById("bulk-action-cancel").addEventListener("click", () => bulkActionDialog.close());
-bulkActionDialog.addEventListener("close", () => { pendingBulkAction = null; pendingSiteRemovalUrl = null; });
+bulkActionDialog.addEventListener("close", () => { pendingBulkAction = null; pendingSiteRemovalUrl = null; pendingImport = null; });
 bulkActionForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const action = pendingBulkAction;
@@ -801,6 +831,30 @@ bulkActionForm.addEventListener("submit", (event) => {
     const url = pendingSiteRemovalUrl;
     bulkActionDialog.close();
     if (url) removeTracker(url);
+    return;
+  }
+  if (action === "import-data") {
+    const backup = pendingImport;
+    if (!backup) return;
+    for (const tracker of state.trackers.values()) {
+      tracker.historyVersion += 1;
+      stopTracker(tracker);
+    }
+    if (state.runDetail) closeRunDetailPanel();
+    state.trackers = new Map(backup.sites.map((site) => {
+      const tracker = createTracker(site.url);
+      tracker.label = site.label;
+      tracker.history = site.history;
+      return [site.url, tracker];
+    }));
+    state.trackerOrder = backup.sites.map((site) => site.url);
+    state.comparisonBaseUrl = backup.baselineUrl;
+    if (backup.apiKey !== undefined) state.apiKey = backup.apiKey;
+    selectedSiteUrl = state.trackerOrder[0] || null;
+    bulkActionDialog.close();
+    persistState();
+    render();
+    document.getElementById("data-status").textContent = `Imported ${backup.sites.length} ${backup.sites.length === 1 ? "site" : "sites"}. Tracking is paused.`;
     return;
   }
   for (const tracker of state.trackers.values()) {
@@ -825,6 +879,84 @@ bulkActionForm.addEventListener("submit", (event) => {
   bulkActionDialog.close();
   persistState();
   render();
+});
+
+function validateBackup(data) {
+  if (!data || data.format !== "pagespeeder-backup" || data.version !== 1 || !Array.isArray(data.sites)) {
+    throw new Error("This isn’t a supported PageSpeeder backup.");
+  }
+  const urls = new Set();
+  const sites = data.sites.map((site) => {
+    const url = typeof site?.url === "string" ? normalizeUrl(site.url) : "";
+    const parsed = parseUrlSafe(url);
+    if (!parsed || !["http:", "https:"].includes(parsed.protocol) || urls.has(url) || typeof site.label !== "string" || site.label.length > 80) {
+      throw new Error("The backup contains an invalid or duplicate site.");
+    }
+    urls.add(url);
+    const history = {};
+    for (const strategy of STRATEGIES) {
+      if (!Array.isArray(site.history?.[strategy])) throw new Error("The backup contains invalid run history.");
+      history[strategy] = site.history[strategy].map((sample) => {
+        if (!sample || !Number.isFinite(sample.timestamp) || !Number.isFinite(sample.performanceScore) || sample.performanceScore < 0 || sample.performanceScore > 100) {
+          throw new Error("The backup contains an invalid run.");
+        }
+        const metrics = {};
+        for (const metric of METRICS) {
+          const value = sample.metrics?.[metric.key];
+          if (!value || !Number.isFinite(value.value) || value.value < 0 || !Number.isFinite(value.score) || value.score < 0 || value.score > 100) {
+            throw new Error("The backup contains invalid run metrics.");
+          }
+          metrics[metric.key] = { value: value.value, score: value.score };
+        }
+        return { timestamp: sample.timestamp, lighthouseFetchTime: typeof sample.lighthouseFetchTime === "string" ? sample.lighthouseFetchTime : null, performanceScore: sample.performanceScore, metrics };
+      });
+    }
+    return { url, label: site.label, history };
+  });
+  const baselineUrl = data.baselineUrl === null ? null : normalizeUrl(typeof data.baselineUrl === "string" ? data.baselineUrl : "");
+  if (data.baselineUrl !== null && (!baselineUrl || !urls.has(baselineUrl))) throw new Error("The backup contains an invalid baseline.");
+  if (Object.hasOwn(data, "apiKey") && (typeof data.apiKey !== "string" || !data.apiKey.trim())) {
+    throw new Error("The backup contains an invalid API key.");
+  }
+  return { sites, baselineUrl, apiKey: Object.hasOwn(data, "apiKey") ? data.apiKey.trim() : undefined };
+}
+
+document.getElementById("export-data").addEventListener("click", () => {
+  const backup = {
+    format: "pagespeeder-backup", version: 1, exportedAt: new Date().toISOString(),
+    baselineUrl: state.comparisonBaseUrl,
+    sites: getOrderedTrackers().map((tracker) => ({ url: tracker.url, label: tracker.label || "", history: tracker.history })),
+  };
+  const includeKey = document.getElementById("export-include-key").checked && hasApiKey();
+  if (includeKey) backup.apiKey = state.apiKey;
+  const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `pagespeeder-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  document.getElementById("data-status").textContent = includeKey ? "Backup downloaded with your API key." : "Backup downloaded. Your API key is not included.";
+});
+
+const importFile = document.getElementById("import-file");
+document.getElementById("import-data").addEventListener("click", () => importFile.click());
+importFile.addEventListener("change", async () => {
+  const file = importFile.files?.[0];
+  importFile.value = "";
+  if (!file) return;
+  try {
+    const backup = validateBackup(JSON.parse(await file.text()));
+    pendingImport = backup;
+    pendingBulkAction = "import-data";
+    bulkActionTitle.textContent = "Import backup?";
+    bulkActionDescription.textContent = `Replace your current sites and run history with ${backup.sites.length} ${backup.sites.length === 1 ? "site" : "sites"} from this backup? Imported sites will be paused. ${backup.apiKey !== undefined ? "The API key in the backup will replace your current key." : "Your API key will stay the same."} Your settings will stay the same.`;
+    bulkActionConfirm.textContent = "Import data";
+    document.getElementById("data-status").textContent = "";
+    bulkActionDialog.showModal();
+    document.getElementById("bulk-action-cancel").focus();
+  } catch (error) {
+    document.getElementById("data-status").textContent = error instanceof SyntaxError ? "Couldn’t read this file as JSON." : error.message;
+  }
 });
 
 toggleDetailsButton?.addEventListener("click", () => {
@@ -895,6 +1027,9 @@ function ensureApiKeyConfigured() {
 
 function updateApiKeyUi() {
   const configured = hasApiKey();
+  const exportIncludeKey = document.getElementById("export-include-key");
+  exportIncludeKey.disabled = !configured;
+  if (!configured) exportIncludeKey.checked = false;
   if (apiKeyStatus) {
     apiKeyStatus.textContent = configured ? "Saved" : "Not set";
   }
@@ -1281,6 +1416,7 @@ function beginLabelEditing(url) {
     return false;
   }
 
+  hideTooltip();
   card.classList.add("is-editing-label");
   labelInput.value = tracker.label || "";
   labelInput.focus();
@@ -1590,7 +1726,7 @@ async function runCycle(tracker) {
   await Promise.all(strategyRuns);
 
   tracker.inFlight = false;
-  if (tracker.running && shouldAutoPauseAtOnePoint(tracker)) {
+  if (tracker.running && shouldAutoPause(tracker)) {
     render();
     persistState();
     return;
@@ -1612,25 +1748,13 @@ async function runCycle(tracker) {
   persistState();
 }
 
-function shouldAutoPauseAtOnePoint(tracker) {
-  const threshold = SECONDARY_CI_HALF_WIDTH_POINTS;
-  const mobileCi = summarize(tracker.history.mobile)?.ci95HalfWidth;
-  const desktopCi = summarize(tracker.history.desktop)?.ci95HalfWidth;
-
-  const hasAboveThreshold =
-    (Number.isFinite(mobileCi) && mobileCi > threshold) ||
-    (Number.isFinite(desktopCi) && desktopCi > threshold);
-  if (hasAboveThreshold) {
-    tracker.autoPauseArmed = true;
-  }
-
-  const bothWithinThreshold =
-    Number.isFinite(mobileCi) &&
-    Number.isFinite(desktopCi) &&
-    mobileCi <= threshold &&
-    desktopCi <= threshold;
-
-  if (!tracker.autoPauseArmed || !bothWithinThreshold) {
+function shouldAutoPause(tracker) {
+  const threshold = state.autoPauseTarget;
+  const mobile = summarize(tracker.history.mobile);
+  const desktop = summarize(tracker.history.desktop);
+  if (threshold === null || !mobile || !desktop || mobile.samples < MIN_STAT_SIG_SAMPLES || desktop.samples < MIN_STAT_SIG_SAMPLES ||
+      !Number.isFinite(mobile.ci95HalfWidth) || !Number.isFinite(desktop.ci95HalfWidth) ||
+      mobile.ci95HalfWidth > threshold || desktop.ci95HalfWidth > threshold) {
     return false;
   }
 
@@ -1638,7 +1762,7 @@ function shouldAutoPauseAtOnePoint(tracker) {
   tracker.phase = "paused";
   tracker.activeStrategy = null;
   tracker.nextRunAt = null;
-  tracker.pauseReason = "stat-sig-1";
+  tracker.pauseReason = `stat-sig-${threshold}`;
   tracker.autoPauseArmed = false;
   return true;
 }
@@ -2232,12 +2356,12 @@ function describeTrackerStatus(tracker) {
     if (!tracker.running) {
       return `Paused (awaiting ${formatStrategyLabel(tracker.activeStrategy)})`;
     }
-    return `Running Google PageSpeed (${formatStrategyLabel(tracker.activeStrategy)})`;
+    return `Running ${formatStrategyLabel(tracker.activeStrategy)}`;
   }
 
   if (!tracker.running) {
-    if (tracker.pauseReason === "stat-sig-1") {
-      return "Paused (reached stat sig ±1)";
+    if (/^stat-sig-[1-5]$/.test(tracker.pauseReason || "")) {
+      return `Paused (reached ±${tracker.pauseReason.slice(9)} points)`;
     }
     return "Paused";
   }
@@ -2681,21 +2805,12 @@ function renderSummaryTile(tile, summary, mode, renderContext, options = {}) {
     main.textContent = "Need runs";
     const sub = document.createElement("span");
     sub.className = "tile-meta-sub";
-    sub.textContent = "stat sig ±2: ~? runs\nstat sig ±1: ~? runs";
+    sub.textContent = state.autoPauseTarget === null ? "Auto-pause off" : `±${state.autoPauseTarget} in ? runs`;
     metaNode.append(main, sub);
     return;
   }
 
   scoreNode.textContent = summary.avgScore.toFixed(1);
-  const requiredRuns = summary.samples < 2
-    ? null
-    : Math.max(MIN_STAT_SIG_SAMPLES, Math.ceil(((1.96 * summary.scoreStdDev) / TARGET_CI_HALF_WIDTH_POINTS) ** 2));
-  const requiredRunsTight = summary.samples < 2
-    ? null
-    : Math.max(MIN_STAT_SIG_SAMPLES, Math.ceil(((1.96 * summary.scoreStdDev) / SECONDARY_CI_HALF_WIDTH_POINTS) ** 2));
-  const moreRuns = requiredRuns === null ? null : Math.max(0, requiredRuns - summary.samples);
-  const moreRunsTight = requiredRunsTight === null ? null : Math.max(0, requiredRunsTight - summary.samples);
-  const formatRuns = (count) => `${count} run${count === 1 ? "" : "s"}`;
   let deltaLine = "";
   if (isBaselineCard) {
     deltaLine = "baseline";
@@ -2708,16 +2823,7 @@ function renderSummaryTile(tile, summary, mode, renderContext, options = {}) {
     deltaLine = baselineDelta(delta, baselineSummary.avgScore);
   }
   const mainLine = `${formatConfidence(summary.ci95HalfWidth)} (${summary.samples} runs)`;
-  let subLine = "stat sig ±2 in ? runs";
-  if (requiredRuns !== null && requiredRunsTight !== null) {
-    if (moreRuns > 0) {
-      subLine = `stat sig ±2 in ${formatRuns(moreRuns)}`;
-    } else if (moreRunsTight > 0) {
-      subLine = `stat sig ±1 in ${formatRuns(moreRunsTight)}`;
-    } else {
-      subLine = "stat sig ±1 ✅";
-    }
-  }
+  const subLine = formatGoalEstimate(summary);
 
   metaNode.innerHTML = "";
   const main = document.createElement("span");
@@ -2736,6 +2842,15 @@ function renderSummaryTile(tile, summary, mode, renderContext, options = {}) {
   metaNode.append(sub);
 
   tile.querySelector(".tile-label").after(createPaneProgress(summary.avgScore, getSummaryBackgroundColor(mode, summary.avgScore, renderContext, "bar"), summary.ci95HalfWidth));
+}
+
+function formatGoalEstimate(summary) {
+  const target = state.autoPauseTarget;
+  if (target === null) return "Auto-pause off";
+  if (!summary || summary.samples < 2) return `±${target} in ? runs`;
+  const required = Math.max(MIN_STAT_SIG_SAMPLES, Math.ceil(((1.96 * summary.scoreStdDev) / target) ** 2));
+  const remaining = Math.max(0, required - summary.samples);
+  return remaining ? `±${target} in ${remaining} ${remaining === 1 ? "run" : "runs"}` : `±${target} reached`;
 }
 
 function renderMetricSummary(tbody, mobileSummary, desktopSummary, renderContext, options = {}) {
@@ -2836,8 +2951,8 @@ function renderMetricSummary(tbody, mobileSummary, desktopSummary, renderContext
   }
 }
 
-function closeRunDetailPanel() {
-  const returnFocus = runDetailReturnFocusElement;
+function closeRunDetailPanel({ restoreFocus = true } = {}) {
+  const returnFocus = restoreFocus ? runDetailReturnFocusElement : null;
   runDetailReturnFocusElement = null;
   state.runDetail = null;
   renderRunDetailPanel();
@@ -3120,11 +3235,14 @@ function render() {
   }
 }
 
+let currentWorkspaceView = "sites";
 function setWorkspaceView(view) {
+  currentWorkspaceView = view;
   if (view !== "sites" && state.runDetail) closeRunDetailPanel();
   document.getElementById("sites-view").hidden = view !== "sites";
   document.getElementById("comparison-view").hidden = view !== "comparison";
-  document.body.classList.toggle("comparison-active", view === "comparison");
+  document.getElementById("settings-view").hidden = view !== "settings";
+  document.body.classList.toggle("comparison-active", view !== "sites");
   const library = document.querySelector(".site-library");
   const addPanel = document.querySelector(".library-add");
   const comparisonAddSlot = document.getElementById("comparison-add-slot");
@@ -3139,12 +3257,16 @@ function setWorkspaceView(view) {
     else button.removeAttribute("aria-current");
   });
   if (view === "sites") requestAnimationFrame(positionSiteSelection);
+  if (view === "settings") requestAnimationFrame(positionSettingsThemeIndicator);
 }
 
 let workspaceTransition = null;
 function switchWorkspaceView(view) {
-  const currentView = document.body.classList.contains("comparison-active") ? "comparison" : "sites";
-  if (view === currentView) return;
+  const currentView = currentWorkspaceView;
+  if (view === currentView) {
+    if (view === "sites" && state.runDetail) closeRunDetailPanel({ restoreFocus: false });
+    return;
+  }
   if (typeof document.startViewTransition !== "function" || window.matchMedia("(prefers-reduced-motion: reduce)").matches || document.body.classList.contains("keyboard-input")) {
     setWorkspaceView(view);
     return;
@@ -3163,8 +3285,12 @@ function switchWorkspaceView(view) {
 document.querySelectorAll(".workspace-tab[data-view]").forEach((button) => {
   button.addEventListener("click", () => switchWorkspaceView(button.dataset.view));
 });
+document.querySelectorAll(".logo-button, .brand-title-button").forEach((button) => {
+  button.addEventListener("click", () => switchWorkspaceView("sites"));
+});
 document.getElementById("site-search").addEventListener("input", () => renderSiteLibrary(buildRenderContext()));
 window.addEventListener("resize", positionSiteSelection);
+window.addEventListener("resize", positionSettingsThemeIndicator);
 window.addEventListener("resize", () => {
   positionRunSelection();
 });
@@ -3225,6 +3351,11 @@ new ResizeObserver(() => {
   document.querySelector("main").style.setProperty("--add-panel-height", `${libraryAdd.offsetHeight}px`);
 }).observe(libraryAdd);
 new ResizeObserver(positionSiteSelection).observe(library);
+const runLayoutObserver = new ResizeObserver(() => {
+  if (state.runDetail) positionRunSelection();
+});
+runLayoutObserver.observe(document.getElementById("score-history-slot"));
+runLayoutObserver.observe(document.getElementById("run-detail-slot"));
 document.getElementById("site-list").addEventListener("scroll", () => {
   syncSiteSeam();
   const menu = document.querySelector(".site-menu[open]");
@@ -3272,7 +3403,8 @@ function updateConnectedEdgeShadow(container, top, bottom, tabLeft = null) {
   const height = container.clientHeight;
   if (!height) return;
   const runOutline = container !== library;
-  const width = runOutline ? container.clientWidth + 8 : container.clientWidth;
+  const width = runOutline ? container.clientWidth + 16 : container.clientWidth;
+  if (runOutline && tabLeft !== null) tabLeft += 8;
   const seamX = runOutline ? width - 6 : width;
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
   svg.querySelector("filter").setAttribute("height", height + 80);
@@ -3517,9 +3649,7 @@ function renderSiteLibrary(renderContext) {
       value.append(bar, scoreLine, info);
       if (summary) {
         const estimate = document.createElement("small");
-        const required = summary.samples < 2 ? null : Math.max(MIN_STAT_SIG_SAMPLES, Math.ceil(((1.96 * summary.scoreStdDev) / TARGET_CI_HALF_WIDTH_POINTS) ** 2));
-        const tight = summary.samples < 2 ? null : Math.max(MIN_STAT_SIG_SAMPLES, Math.ceil(((1.96 * summary.scoreStdDev) / SECONDARY_CI_HALF_WIDTH_POINTS) ** 2));
-        estimate.textContent = required === null ? "±2 in ? runs" : summary.samples < required ? `±2 in ${required - summary.samples} runs` : summary.samples < tight ? `±1 in ${tight - summary.samples} runs` : "±1 reached";
+        estimate.textContent = formatGoalEstimate(summary);
         value.append(estimate);
       }
       const baselineScore = renderContext.summariesByUrl.get(state.comparisonBaseUrl)?.[mode.toLowerCase()]?.avgScore;
@@ -4242,6 +4372,7 @@ function persistState() {
     const payload = {
       apiKey: state.apiKey,
       pollIntervalSec: state.pollIntervalSec,
+      autoPauseTarget: state.autoPauseTarget,
       themeMode: state.themeMode,
       colorMode: state.colorMode,
       glimmDev: state.glimmDev,
@@ -4273,6 +4404,8 @@ function hydrateState() {
       apiKeyInput.value = parsed.apiKey;
     }
     state.pollIntervalSec = FIXED_POLL_INTERVAL_SEC;
+    if ([1, 2, 3, 4, 5, null].includes(parsed.autoPauseTarget)) state.autoPauseTarget = parsed.autoPauseTarget;
+    autoPauseTargetInput.value = state.autoPauseTarget === null ? "off" : String(state.autoPauseTarget);
 
     if (typeof parsed.themeMode === "string" && THEME_MODES.has(parsed.themeMode)) {
       state.themeMode = parsed.themeMode;
@@ -4328,8 +4461,7 @@ function hydrateState() {
         }
         tracker.activeStrategy =
           typeof stored.activeStrategy === "string" ? stored.activeStrategy : null;
-        tracker.pauseReason =
-          stored.pauseReason === "stat-sig-1" ? "stat-sig-1" : null;
+        tracker.pauseReason = /^stat-sig-[1-5]$/.test(stored.pauseReason || "") ? stored.pauseReason : null;
         tracker.autoPauseArmed = stored.autoPauseArmed === true;
 
         state.trackers.set(url, tracker);

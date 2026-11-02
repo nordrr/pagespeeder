@@ -612,16 +612,16 @@ button:disabled {
   cursor: not-allowed;
 }
 
-button:not(.workspace-tab):not(.site-item):not(.site-action):not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(.drag-handle):not(.theme-mode-button):not(:disabled):hover {
+button:not(.logo-button):not(.brand-title-button):not(.workspace-tab):not(.site-item):not(.site-action):not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(.drag-handle):not(.theme-mode-button):not(:disabled):hover {
   box-shadow: var(--button-hover-shadow);
   transform: translateY(-1px);
 }
 
-button:not(.workspace-tab):not(.site-item):not(.site-action):not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(.drag-handle):not(.theme-mode-button):not(:disabled):active {
+button:not(.logo-button):not(.brand-title-button):not(.workspace-tab):not(.site-item):not(.site-action):not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(.drag-handle):not(.theme-mode-button):not(:disabled):active {
   transform: translateY(0) scale(0.98);
 }
 
-button:not(.workspace-tab):not(.site-item):not(.site-action):not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(.drag-handle):not(.theme-mode-button):not(.secondary):not(.danger):not(:disabled):hover {
+button:not(.logo-button):not(.brand-title-button):not(.workspace-tab):not(.site-item):not(.site-action):not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(.drag-handle):not(.theme-mode-button):not(.secondary):not(.danger):not(:disabled):hover {
   background: var(--accent-hover);
   border-color: color-mix(in srgb, var(--accent-hover) 84%, black 16%);
   box-shadow: var(--button-hover-shadow);
