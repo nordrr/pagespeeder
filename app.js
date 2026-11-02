@@ -145,6 +145,8 @@ const state = {
 const settingsForm = document.getElementById("settings-form");
 const addUrlForm = document.getElementById("add-url-form");
 const apiKeyInput = document.getElementById("api-key");
+// API keys are not login passwords; use visual masking where supported to avoid password autofill.
+if (CSS.supports("-webkit-text-security", "disc")) apiKeyInput.type = "text";
 const urlInput = document.getElementById("url-input");
 const shopifyPbSuggestion = document.getElementById("shopify-pb-suggestion");
 const shopifyPbAction = document.getElementById("shopify-pb-action");
@@ -172,6 +174,7 @@ const openSettingsButton = document.getElementById("open-settings");
 const apiKeyStatus = document.getElementById("api-key-status");
 const setupHint = document.getElementById("setup-hint");
 const apiKeyDialog = document.getElementById("api-key-dialog");
+const apiKeyIntro = document.getElementById("api-key-intro");
 const apiKeyDialogCloseButton = document.getElementById("api-key-dialog-close");
 const skipSetupButton = document.getElementById("skip-setup");
 const clearApiKeyButton = document.getElementById("clear-api-key");
@@ -198,6 +201,9 @@ let tooltipShowTimerId = null;
 let tooltipHideTimerId = null;
 let headerSyncRafId = null;
 let draggedTrackerUrl = null;
+let siteDrag = null;
+let siteListNeedsRefresh = false;
+let suppressSiteClick = false;
 let dragPreviewElement = null;
 let dragPreviewBaseWidth = 0;
 let dragPreviewAnimating = false;
@@ -235,6 +241,7 @@ function applyThemeMode() {
   const resolvedTheme = getResolvedTheme(mode);
   document.documentElement.dataset.theme = resolvedTheme;
   document.documentElement.style.colorScheme = resolvedTheme;
+  document.querySelector(".theme-control").dataset.selected = mode;
   for (const button of themeModeButtons) {
     const isActive = button.dataset.themeMode === mode;
     button.classList.toggle("is-active", isActive);
@@ -411,7 +418,7 @@ function syncGlimmDevPanel() {
   }
 
   if (glimmDevAutoplayButton) {
-    glimmDevAutoplayButton.textContent = state.glimmDev.autoplay ? "Stop autoplay" : "Start autoplay";
+    glimmDevAutoplayButton.textContent = state.glimmDev.autoplay ? "Pause autoplay" : "Start autoplay";
     glimmDevAutoplayButton.classList.toggle("is-active", state.glimmDev.autoplay);
   }
 }
@@ -571,9 +578,7 @@ if (typeof systemThemeQuery.addEventListener === "function") {
 for (const button of themeModeButtons) {
   button.addEventListener("click", () => {
     const requestedMode = button.dataset.themeMode;
-    if (!THEME_MODES.has(requestedMode)) {
-      return;
-    }
+    if (!THEME_MODES.has(requestedMode)) return;
     setThemeModeWithSweep(requestedMode);
   });
 }
@@ -719,7 +724,7 @@ apiKeyDialogCloseButton?.addEventListener("click", () => {
 skipSetupButton?.addEventListener("click", closeApiKeyDialog);
 
 apiKeyDialog?.addEventListener("click", (event) => {
-  if (event.target === apiKeyDialog) {
+  if (event.target === apiKeyDialog && apiKeyIntro.hidden) {
     closeApiKeyDialog();
   }
 });
@@ -767,7 +772,7 @@ function openBulkActionDialog(action) {
   bulkActionTitle.textContent = clearRuns ? "Clear all runs?" : "Delete all sites?";
   bulkActionDescription.textContent = clearRuns
     ? "Remove all saved run history and scores. Your sites, labels, and baseline stay in place. Running sites continue on schedule; results already in progress are discarded."
-    : "Delete every tracked site and its run history. Tracking will stop. Your API key and appearance settings stay in this browser.";
+    : "Delete every tracked site and its run history. Tracking will end. Your API key and appearance settings stay in this browser.";
   bulkActionConfirm.textContent = clearRuns ? "Clear Runs" : "Delete All Sites";
   bulkActionDialog.showModal();
   document.getElementById("bulk-action-cancel").focus();
@@ -777,8 +782,8 @@ function openRemoveSiteDialog(tracker) {
   hideTooltip();
   pendingBulkAction = "remove-site";
   pendingSiteRemovalUrl = tracker.url;
-  bulkActionTitle.textContent = "Remove site?";
-  bulkActionDescription.textContent = `Remove ${tracker.label || tracker.url} and its saved run history? Tracking will stop.`;
+  bulkActionTitle.textContent = `Remove ${tracker.label || tracker.url}?`;
+  bulkActionDescription.textContent = "Tracking will end, and saved run history will be lost.";
   bulkActionConfirm.textContent = "Remove Site";
   bulkActionDialog.showModal();
   document.getElementById("bulk-action-cancel").focus();
@@ -802,6 +807,7 @@ bulkActionForm.addEventListener("submit", (event) => {
     tracker.historyVersion += 1;
     if (action === "clear-runs") {
       tracker.history = { mobile: [], desktop: [] };
+      tracker.runErrors = { mobile: "", desktop: "" };
       tracker.autoPauseArmed = false;
       tracker.pauseReason = null;
     } else {
@@ -856,7 +862,8 @@ function openApiKeyDialog(options = {}) {
   pendingAddUrlAfterKey = options.pendingUrl || null;
   const onboarding = options.onboarding === true;
   document.getElementById("api-key-dialog-title").textContent = onboarding ? "Welcome to PageSpeeder" : "Google PageSpeed API key";
-  document.getElementById("api-key-intro").hidden = !onboarding;
+  apiKeyIntro.hidden = !onboarding;
+  document.getElementById("api-key-get-started").hidden = !onboarding;
   skipSetupButton.hidden = !onboarding;
   clearApiKeyButton.hidden = onboarding;
   apiKeyInput.value = state.apiKey;
@@ -917,6 +924,7 @@ function createTracker(url) {
       desktop: [],
     },
     lastError: "",
+    runErrors: { mobile: "", desktop: "" },
     phase: "paused",
     activeStrategy: null,
     pauseReason: null,
@@ -1561,11 +1569,11 @@ async function runCycle(tracker) {
       if (!isDuplicateSample(previousSample, sample)) {
         tracker.history[strategy].push(sample);
       }
-      tracker.lastError = "";
+      tracker.runErrors[strategy] = "";
       persistState();
     } catch (error) {
       if (tracker.historyVersion !== historyVersion) return;
-      tracker.lastError = `${strategy}: ${error.message}`;
+      tracker.runErrors[strategy] = error.message;
       persistState();
     } finally {
       pendingStrategies.delete(strategy);
@@ -1728,6 +1736,7 @@ function summarize(samples) {
     metricSummary[metric.key] = {
       avgValue: mean(values),
       avgScore: mean(scores),
+      ci95Value: ci95(values),
     };
   }
 
@@ -1892,6 +1901,18 @@ function formatDeltaPointsAndPercent(deltaPoints, baselinePoints) {
   return `${pointsLabel} (${formatSignedNumber(deltaPercent, 1)}%)`;
 }
 
+function baselineDelta(deltaPoints, baselinePoints) {
+  return {
+    label: `${formatSignedNumber(deltaPoints, 1)} pts vs baseline`,
+    detail: `${formatDeltaPointsAndPercent(deltaPoints, baselinePoints)} compared to baseline`,
+  };
+}
+
+function setBaselineDeltaLabel(element, delta) {
+  element.textContent = typeof delta === "string" ? delta : delta.label;
+  if (typeof delta !== "string") element.title = delta.detail;
+}
+
 function contributionPointsForDisplay(strategy, metricKey, value) {
   const contribution = metricContribution(strategy, metricKey, value);
   if (!contribution) {
@@ -1966,7 +1987,7 @@ function createMetricValueBlock(
   if (deltaText) {
     const deltaLine = document.createElement("span");
     deltaLine.className = "metric-delta-value";
-    deltaLine.textContent = deltaText;
+    setBaselineDeltaLabel(deltaLine, deltaText);
     block.append(deltaLine);
   }
 
@@ -1981,21 +2002,55 @@ function mixColor(from, to, ratio) {
   return `rgb(${red} ${green} ${blue})`;
 }
 
-function createPaneProgress(value, color) {
+function addConfidenceBounds(track, low, high, center) {
+  if (!Number.isFinite(low) || !Number.isFinite(high) || !Number.isFinite(center)) return;
+  const lower = Math.max(0, Math.min(100, Math.min(low, high)));
+  const upper = Math.max(0, Math.min(100, Math.max(low, high)));
+  const range = document.createElement("span");
+  range.className = "score-confidence-range";
+  range.style.left = `${lower}%`;
+  range.style.width = `${Math.max(0, upper - lower)}%`;
+  const marker = document.createElement("span");
+  marker.className = "score-confidence-center";
+  marker.style.left = `${Math.max(0, Math.min(100, center))}%`;
+  track.append(range, marker);
+}
+
+function addConfidenceRange(track, average, halfWidth) {
+  if (!Number.isFinite(average) || !Number.isFinite(halfWidth) || halfWidth < 0) return;
+  addConfidenceBounds(track, average - halfWidth, average + halfWidth, average);
+}
+
+function createPaneProgress(value, color, confidence = null) {
   const track = document.createElement("span");
   track.className = "pane-progress";
+  track.style.setProperty("--confidence-color", color);
   track.setAttribute("aria-hidden", "true");
   const fill = document.createElement("span");
   fill.className = "pane-progress-fill";
   fill.style.width = `${Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0))}%`;
   fill.style.backgroundColor = color;
   track.append(fill);
+  addConfidenceRange(track, value, confidence);
   return track;
 }
 
-function metricProgress(metric, value, mode, color) {
-  const contribution = metricContribution(mode, metric.key, value);
-  return createPaneProgress(contribution ? (contribution.points / contribution.maxPoints) * 100 : 0, color);
+function addMetricProgress(block, metric, summary, mode, color) {
+  const contribution = metricContribution(mode, metric.key, summary.avgValue);
+  const progress = createPaneProgress(contribution ? (contribution.points / contribution.maxPoints) * 100 : 0, color);
+  if (contribution && Number.isFinite(summary.ci95Value)) {
+    const lowValue = Math.max(0, summary.avgValue - summary.ci95Value);
+    const highValue = summary.avgValue + summary.ci95Value;
+    const lowScore = metricContribution(mode, metric.key, highValue);
+    const highScore = metricContribution(mode, metric.key, lowValue);
+    addConfidenceBounds(progress, lowScore.score, highScore.score, contribution.score);
+    const pointsLine = block.querySelector(".metric-points-line");
+    const explanation = `95% confidence interval for the average measured value: ${metric.format(lowValue)}–${metric.format(highValue)}; approximately ${formatPointValue(lowScore.points)}–${formatPointValue(highScore.points)} weighted points.`;
+    pointsLine.dataset.tooltip += ` ${explanation}`;
+    pointsLine.title = pointsLine.dataset.tooltip;
+    pointsLine.setAttribute("aria-label", `${pointsLine.getAttribute("aria-label")} ${explanation}`);
+  }
+  block.prepend(progress);
 }
 
 function getScorePalette(kind = "surface") {
@@ -2438,12 +2493,13 @@ function buildScoreRows(tracker, limit = 200) {
   }
 
   const shouldShowPending =
-    (tracker.running || tracker.inFlight) &&
+    (tracker.running || tracker.inFlight || tracker.runErrors.mobile || tracker.runErrors.desktop) &&
     mobileSamples.length === desktopSamples.length &&
     (tracker.phase === "waiting" ||
       tracker.phase === "queued" ||
       tracker.phase === "running" ||
-      tracker.phase === "awaiting-google");
+      tracker.phase === "awaiting-google" ||
+      tracker.runErrors.mobile || tracker.runErrors.desktop);
 
   if (shouldShowPending) {
     rows.unshift({
@@ -2460,6 +2516,10 @@ function buildScoreRows(tracker, limit = 200) {
 }
 
 function getPendingStatus(tracker, rowData, mode) {
+  const retrying = tracker.phase === "awaiting-google" && (tracker.activeStrategy === "both" || tracker.activeStrategy === mode);
+  if ((rowData.pending || rowData.isPartial) && tracker.runErrors[mode] && !retrying) {
+    return { kind: "error", text: "Failed", detail: `${mode}: ${tracker.runErrors[mode]}` };
+  }
   if ((!tracker.running && !tracker.inFlight) || (!rowData.pending && !rowData.isPartial)) {
     return null;
   }
@@ -2486,12 +2546,17 @@ function renderPendingCell(cell, status) {
 
   const wrapper = document.createElement("span");
   wrapper.className = "run-pending";
+  if (status.kind === "error") {
+    wrapper.classList.add("is-error");
+    wrapper.title = status.detail;
+    wrapper.setAttribute("aria-label", status.detail);
+  }
 
   if (status.kind === "google") {
     const spinner = document.createElement("span");
     spinner.className = "run-spinner";
     wrapper.append(spinner);
-  } else {
+  } else if (status.kind !== "error") {
     const hourglass = document.createElement("span");
     hourglass.className = "run-hourglass";
     hourglass.textContent = "⏳";
@@ -2640,7 +2705,7 @@ function renderSummaryTile(tile, summary, mode, renderContext, options = {}) {
     Number.isFinite(baselineSummary.avgScore)
   ) {
     const delta = summary.avgScore - baselineSummary.avgScore;
-    deltaLine = formatDeltaPointsAndPercent(delta, baselineSummary.avgScore);
+    deltaLine = baselineDelta(delta, baselineSummary.avgScore);
   }
   const mainLine = `${formatConfidence(summary.ci95HalfWidth)} (${summary.samples} runs)`;
   let subLine = "stat sig ±2 in ? runs";
@@ -2665,12 +2730,12 @@ function renderSummaryTile(tile, summary, mode, renderContext, options = {}) {
   if (deltaLine) {
     const deltaNode = document.createElement("span");
     deltaNode.className = "tile-meta-delta";
-    deltaNode.textContent = deltaLine;
+    setBaselineDeltaLabel(deltaNode, deltaLine);
     metaNode.append(deltaNode);
   }
   metaNode.append(sub);
 
-  tile.querySelector(".tile-label").after(createPaneProgress(summary.avgScore, getSummaryBackgroundColor(mode, summary.avgScore, renderContext, "bar")));
+  tile.querySelector(".tile-label").after(createPaneProgress(summary.avgScore, getSummaryBackgroundColor(mode, summary.avgScore, renderContext, "bar"), summary.ci95HalfWidth));
 }
 
 function renderMetricSummary(tbody, mobileSummary, desktopSummary, renderContext, options = {}) {
@@ -2708,7 +2773,7 @@ function renderMetricSummary(tbody, mobileSummary, desktopSummary, renderContext
           const baselineMobileContribution = metricContribution("mobile", metric.key, baselineMobileMetric.avgValue);
           if (mobileContribution && baselineMobileContribution) {
             const deltaPoints = mobileContribution.points - baselineMobileContribution.points;
-            mobileDeltaText = formatDeltaPointsAndPercent(deltaPoints, baselineMobileContribution.points);
+            mobileDeltaText = baselineDelta(deltaPoints, baselineMobileContribution.points);
           }
         }
       }
@@ -2723,7 +2788,7 @@ function renderMetricSummary(tbody, mobileSummary, desktopSummary, renderContext
           mobileDeltaText,
         ),
       );
-      mobileCell.querySelector(".metric-cell").prepend(metricProgress(metric, mobileMetric.avgValue, "mobile", mobileCellColor));
+      addMetricProgress(mobileCell.querySelector(".metric-cell"), metric, mobileMetric, "mobile", mobileCellColor);
     }
     row.append(mobileCell);
 
@@ -2748,7 +2813,7 @@ function renderMetricSummary(tbody, mobileSummary, desktopSummary, renderContext
           const baselineDesktopContribution = metricContribution("desktop", metric.key, baselineDesktopMetric.avgValue);
           if (desktopContribution && baselineDesktopContribution) {
             const deltaPoints = desktopContribution.points - baselineDesktopContribution.points;
-            desktopDeltaText = formatDeltaPointsAndPercent(deltaPoints, baselineDesktopContribution.points);
+            desktopDeltaText = baselineDelta(deltaPoints, baselineDesktopContribution.points);
           }
         }
       }
@@ -2763,7 +2828,7 @@ function renderMetricSummary(tbody, mobileSummary, desktopSummary, renderContext
           desktopDeltaText,
         ),
       );
-      desktopCell.querySelector(".metric-cell").prepend(metricProgress(metric, desktopMetric.avgValue, "desktop", desktopCellColor));
+      addMetricProgress(desktopCell.querySelector(".metric-cell"), metric, desktopMetric, "desktop", desktopCellColor);
     }
     row.append(desktopCell);
 
@@ -3131,8 +3196,17 @@ function syncRunSeam(selection) {
   const slotBounds = slot.getBoundingClientRect();
   const detailSlot = document.getElementById("run-detail-slot");
   const detailBounds = detailSlot.getBoundingClientRect();
-  detailSlot.style.setProperty("--run-seam-top", `${rowBounds.top - detailBounds.top}px`);
-  detailSlot.style.setProperty("--run-seam-height", `${rowBounds.height}px`);
+  const scroller = selection.closest(".score-history-scroll");
+  const scrollBounds = scroller.getBoundingClientRect();
+  const headerBottom = scroller.querySelector("thead th").getBoundingClientRect().bottom;
+  const visibleTop = Math.max(scrollBounds.top, headerBottom);
+  const visibleBottom = scrollBounds.bottom;
+  const coverTop = Math.max(rowBounds.top - 18, visibleTop);
+  const coverBottom = Math.min(rowBounds.bottom + 18, visibleBottom);
+  detailSlot.style.setProperty("--run-seam-top", `${coverTop - detailBounds.top}px`);
+  detailSlot.style.setProperty("--run-seam-height", `${Math.max(0, coverBottom - coverTop)}px`);
+  slot.style.setProperty("--run-clip-top", `${Math.max(0, visibleTop - slotBounds.top)}px`);
+  slot.style.setProperty("--run-clip-bottom", `${Math.max(0, slotBounds.bottom - visibleBottom)}px`);
   updateConnectedEdgeShadow(slot, rowBounds.top - slotBounds.top, rowBounds.bottom - slotBounds.top, rowBounds.left - slotBounds.left);
 }
 
@@ -3151,7 +3225,15 @@ new ResizeObserver(() => {
   document.querySelector("main").style.setProperty("--add-panel-height", `${libraryAdd.offsetHeight}px`);
 }).observe(libraryAdd);
 new ResizeObserver(positionSiteSelection).observe(library);
-document.getElementById("site-list").addEventListener("scroll", syncSiteSeam, { passive: true });
+document.getElementById("site-list").addEventListener("scroll", () => {
+  syncSiteSeam();
+  const menu = document.querySelector(".site-menu[open]");
+  if (menu) positionSiteMenu(menu);
+}, { passive: true });
+window.addEventListener("resize", () => {
+  const menu = document.querySelector(".site-menu[open]");
+  if (menu) positionSiteMenu(menu);
+});
 document.getElementById("site-selection").addEventListener("transitionrun", (event) => {
   if (event.propertyName === "transform") followSiteSeam(event.currentTarget);
 });
@@ -3161,7 +3243,7 @@ function syncSiteSeam() {
   if (selection.hidden) return;
   const bounds = selection.getBoundingClientRect();
   const libraryBounds = library.getBoundingClientRect();
-  updateConnectedEdgeShadow(library, bounds.top - libraryBounds.top, bounds.bottom - libraryBounds.top);
+  updateConnectedEdgeShadow(library, bounds.top - libraryBounds.top, bounds.bottom - libraryBounds.top, bounds.left - libraryBounds.left);
 }
 
 function createConnectedEdgeShadow(container, id) {
@@ -3171,6 +3253,10 @@ function createConnectedEdgeShadow(container, id) {
   svg.innerHTML = `<defs><filter id="${id}-filter" filterUnits="userSpaceOnUse" x="-160" y="-40" width="400"><feGaussianBlur in="SourceAlpha" stdDeviation="2.5" result="blur1"/><feOffset in="blur1" dy="2" result="offset1"/><feFlood flood-color="#101828" flood-opacity=".06" result="color1"/><feComposite in="color1" in2="offset1" operator="in" result="shadow1"/><feGaussianBlur in="SourceAlpha" stdDeviation="1" result="blur2"/><feOffset in="blur2" dy="1" result="offset2"/><feFlood flood-color="#101828" flood-opacity=".04" result="color2"/><feComposite in="color2" in2="offset2" operator="in" result="shadow2"/><feMerge><feMergeNode in="shadow1"/><feMergeNode in="shadow2"/></feMerge></filter><mask id="${id}-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="32"><rect x="0" y="0" width="32" fill="white"/><path fill="black"/></mask></defs><path fill="white" filter="url(#${id}-filter)" mask="url(#${id}-mask)"/>`;
   if (id === "run-edge") {
     const outline = svg.lastElementChild;
+    const cover = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    cover.classList.add("run-scrollbar-cover");
+    cover.setAttribute("fill", "var(--canvas)");
+    svg.insertBefore(cover, outline);
     outline.removeAttribute("filter");
     outline.removeAttribute("mask");
     outline.setAttribute("fill", "none");
@@ -3185,11 +3271,12 @@ function updateConnectedEdgeShadow(container, top, bottom, tabLeft = null) {
   if (!svg) return;
   const height = container.clientHeight;
   if (!height) return;
-  const runOutline = tabLeft !== null;
-  const width = runOutline ? container.clientWidth + 8 : 32;
+  const runOutline = container !== library;
+  const width = runOutline ? container.clientWidth + 8 : container.clientWidth;
   const seamX = runOutline ? width - 6 : width;
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
   svg.querySelector("filter").setAttribute("height", height + 80);
+  svg.querySelector("filter").setAttribute("width", width + 320);
   svg.querySelector("mask").setAttribute("height", height);
   svg.querySelector("mask").setAttribute("width", width);
   svg.querySelector("mask rect").setAttribute("height", height);
@@ -3198,7 +3285,7 @@ function updateConnectedEdgeShadow(container, top, bottom, tabLeft = null) {
   const edge = hasTab && runOutline
     ? `V ${bottom + 18} Q ${width} ${bottom} ${width - 18} ${bottom} H ${tabLeft + 16} Q ${tabLeft} ${bottom} ${tabLeft} ${bottom - 16} V ${top + 16} Q ${tabLeft} ${top} ${tabLeft + 16} ${top} H ${width - 18} Q ${width} ${top} ${width} ${top - 18}`
     : hasTab
-      ? `V ${bottom + 18} Q 32 ${bottom} 14 ${bottom} H -120 V ${top} H 14 Q 32 ${top} 32 ${top - 18}`
+      ? `V ${bottom + 18} Q ${width} ${bottom} ${width - 18} ${bottom} H ${tabLeft + 18} Q ${tabLeft} ${bottom} ${tabLeft} ${bottom - 18} V ${top + 18} Q ${tabLeft} ${top} ${tabLeft + 18} ${top} H ${width - 18} Q ${width} ${top} ${width} ${top - 18}`
       : "";
   const bottomEdge = runOutline ? `V ${height} H ${width + 18} Q ${width} ${height} ${width} ${height - 18}` : `V ${height + 20} H ${width}`;
   const path = `M ${width + 18} 0 H ${width + 168} ${bottomEdge} ${edge} V 18 Q ${width} 0 ${width + 18} 0 Z`;
@@ -3206,6 +3293,12 @@ function updateConnectedEdgeShadow(container, top, bottom, tabLeft = null) {
   const tabOutline = hasTab && runOutline
     ? `M ${seamX} ${top - 22} V ${top - 18} Q ${seamX} ${top} ${seamX - 18} ${top} H ${tabLeft + 16} Q ${tabLeft} ${top} ${tabLeft} ${top + 16} V ${bottom - 16} Q ${tabLeft} ${bottom} ${tabLeft + 16} ${bottom} H ${seamX - 18} Q ${seamX} ${bottom} ${seamX} ${bottom + 18} V ${bottom + 22}`
     : "";
+  if (runOutline) {
+    const cover = hasTab
+      ? `M ${seamX - 16} ${top - 18} H ${seamX} V ${bottom + 18} H ${seamX - 16} Z`
+      : "";
+    svg.querySelector(".run-scrollbar-cover").setAttribute("d", cover);
+  }
   svg.lastElementChild.setAttribute("d", runOutline ? tabOutline : path);
 }
 
@@ -3222,6 +3315,7 @@ function positionSiteSelection() {
   const selected = list.querySelector(".site-row.is-selected");
   if (!selected || !list.getClientRects().length) {
     selection.hidden = true;
+    updateConnectedEdgeShadow(library, 0, 0, 0);
     return;
   }
   const listBounds = list.getBoundingClientRect();
@@ -3232,7 +3326,131 @@ function positionSiteSelection() {
   syncSiteSeam();
 }
 
+function positionSiteMenu(menu) {
+  const trigger = menu.querySelector("summary").getBoundingClientRect();
+  const items = menu.querySelector(".site-menu-items");
+  const listBounds = document.getElementById("site-list").getBoundingClientRect();
+  const bottom = Math.min(listBounds.bottom, libraryAdd.getBoundingClientRect().top, window.innerHeight);
+  const availableBelow = bottom - trigger.bottom - 5;
+  const availableAbove = trigger.top - Math.max(0, listBounds.top) - 5;
+  menu.classList.toggle("opens-up", availableBelow < items.offsetHeight && availableAbove > availableBelow);
+}
+
+function moveSiteDrag(event) {
+  if (!siteDrag || event.pointerId !== siteDrag.pointerId) return;
+  const drag = siteDrag;
+  drag.clientY = event.clientY;
+  if (!drag.active && Math.abs(event.clientY - drag.startY) < 5) return;
+  if (!drag.active) {
+    drag.active = true;
+    suppressSiteClick = true;
+    hideTooltip();
+    document.body.classList.add("site-dragging");
+    drag.row.classList.add("is-reordering");
+    requestAnimationFrame(followSiteDrag);
+  }
+  event.preventDefault();
+  const rows = drag.row.parentElement;
+  const desiredTop = event.clientY - drag.pointerOffset;
+  const center = desiredTop + drag.row.offsetHeight / 2;
+  const others = Array.from(rows.children).filter((row) => row !== drag.row && row.classList.contains("site-row"));
+  const rowsTop = rows.getBoundingClientRect().top;
+  const next = others.find((row) => center < rowsTop + row.offsetTop + row.offsetHeight / 2) || null;
+  if (drag.row.nextElementSibling !== next) {
+    const oldPositions = new Map(others.map((row) => [row, row.getBoundingClientRect().top]));
+    rows.insertBefore(drag.row, next);
+    for (const row of others) {
+      row.getAnimations().forEach((animation) => animation.cancel());
+      const offset = oldPositions.get(row) - row.getBoundingClientRect().top;
+      if (offset && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        row.animate([{ transform: `translateY(${offset}px)` }, { transform: "translateY(0)" }], { duration: 180, easing: "cubic-bezier(.32,.72,0,1)" });
+      }
+    }
+  }
+  drag.row.style.transform = `translateY(${desiredTop - (rows.getBoundingClientRect().top + drag.row.offsetTop)}px)`;
+  positionSiteSelection();
+}
+
+function followSiteDrag() {
+  if (!siteDrag?.active) return;
+  const list = document.getElementById("site-list");
+  const bounds = list.getBoundingClientRect();
+  const bottom = Math.min(bounds.bottom, libraryAdd.getBoundingClientRect().top);
+  const edge = 36;
+  const speed = siteDrag.clientY < bounds.top + edge ? -12 : siteDrag.clientY > bottom - edge ? 12 : 0;
+  if (speed) {
+    const previous = list.scrollTop;
+    list.scrollTop += speed;
+    if (list.scrollTop !== previous) moveSiteDrag({ pointerId: siteDrag.pointerId, clientY: siteDrag.clientY, preventDefault() {} });
+  }
+  positionSiteSelection();
+  requestAnimationFrame(followSiteDrag);
+}
+
+function endSiteDrag(event, cancelled = false) {
+  if (!siteDrag || (event && event.pointerId !== undefined && event.pointerId !== siteDrag.pointerId)) return;
+  const drag = siteDrag;
+  clearTimeout(drag.holdTimer);
+  siteDrag = null;
+  if (!drag.active) return;
+  const rows = drag.row.parentElement;
+  if (cancelled) {
+    for (const url of drag.initialVisibleOrder) {
+      const row = Array.from(rows.children).find((item) => item.dataset.url === url);
+      if (row) rows.append(row);
+    }
+  } else {
+    const visible = Array.from(rows.querySelectorAll(":scope > .site-row"), (row) => row.dataset.url);
+    const visibleSet = new Set(visible);
+    let index = 0;
+    state.trackerOrder = getOrderedTrackerUrls().map((url) => visibleSet.has(url) ? visible[index++] : url);
+    persistState();
+  }
+  const from = drag.row.style.transform;
+  drag.row.style.transform = "";
+  drag.row.classList.remove("is-reordering");
+  document.body.classList.remove("site-dragging");
+  if (from && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    const animation = drag.row.animate([{ transform: from }, { transform: "translateY(0)" }], { duration: 180, easing: "cubic-bezier(.32,.72,0,1)" });
+    if (drag.row.classList.contains("is-selected")) {
+      const selection = document.getElementById("site-selection");
+      selection.style.transition = "none";
+      const restoreSelectionTransition = () => { selection.style.removeProperty("transition"); positionSiteSelection(); };
+      animation.onfinish = restoreSelectionTransition;
+      animation.oncancel = restoreSelectionTransition;
+      const follow = () => { positionSiteSelection(); if (animation.playState === "running") requestAnimationFrame(follow); };
+      requestAnimationFrame(follow);
+    }
+  }
+  positionSiteSelection();
+  setTimeout(() => { suppressSiteClick = false; }, 0);
+  if (siteListNeedsRefresh) { siteListNeedsRefresh = false; render(); }
+}
+
+document.addEventListener("pointermove", moveSiteDrag);
+document.addEventListener("pointerup", (event) => endSiteDrag(event));
+document.addEventListener("pointercancel", (event) => endSiteDrag(event, true));
+document.addEventListener("touchmove", (event) => {
+  if (!siteDrag || siteDrag.touchId === undefined) return;
+  const touch = Array.from(event.changedTouches).find((item) => item.identifier === siteDrag.touchId);
+  if (!touch) return;
+  if (!siteDrag.active && Math.abs(touch.clientY - siteDrag.startY) > 8) { endSiteDrag(null, true); return; }
+  if (siteDrag.active) moveSiteDrag({ pointerId: siteDrag.pointerId, clientY: touch.clientY, preventDefault: () => event.preventDefault() });
+}, { passive: false });
+document.addEventListener("touchend", (event) => {
+  if (siteDrag?.touchId !== undefined && Array.from(event.changedTouches).some((item) => item.identifier === siteDrag.touchId)) {
+    if (siteDrag.active && event.cancelable) event.preventDefault();
+    endSiteDrag(null);
+  }
+}, { passive: false });
+document.addEventListener("touchcancel", () => { if (siteDrag?.touchId !== undefined) endSiteDrag(null, true); });
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && siteDrag?.active) { event.preventDefault(); endSiteDrag(null, true); }
+});
+
 function renderSiteLibrary(renderContext) {
+  if (siteDrag?.active) { siteListNeedsRefresh = true; return; }
+  if (siteDrag) { clearTimeout(siteDrag.holdTimer); siteDrag = null; }
   const list = document.getElementById("site-list");
   const rows = document.getElementById("site-list-rows");
   const query = document.getElementById("site-search").value.trim().toLowerCase();
@@ -3248,8 +3466,8 @@ function renderSiteLibrary(renderContext) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "site-item";
-    button.draggable = true;
-    button.title = "Drag to reorder";
+    button.title = "Drag to reorder; touch and hold, or use Alt + arrow keys";
+    button.setAttribute("aria-description", "Drag to reorder, touch and hold, or use Alt plus the up and down arrow keys.");
     if (tracker.url === selectedSiteUrl) button.setAttribute("aria-current", "page");
     const copy = document.createElement("span");
     copy.className = "site-item-copy";
@@ -3259,8 +3477,17 @@ function renderSiteLibrary(renderContext) {
     const summaries = renderContext.summariesByUrl.get(tracker.url) || {};
     const mobile = summaries.mobile?.avgScore;
     const desktop = summaries.desktop?.avgScore;
-    status.textContent = `● ${describeTrackerStatus(tracker)}${state.comparisonBaseUrl === tracker.url ? " · Baseline" : ""}`;
     status.className = `site-status${tracker.running ? " is-running" : ""}`;
+    if (tracker.running) {
+      const spinner = document.createElement("span");
+      spinner.className = "run-spinner";
+      spinner.setAttribute("aria-hidden", "true");
+      status.append(spinner);
+    }
+    const statusText = document.createElement("span");
+    statusText.className = "site-status-text";
+    statusText.textContent = `${tracker.running ? "" : "● "}${describeTrackerStatus(tracker)}${state.comparisonBaseUrl === tracker.url ? " · Baseline" : ""}`;
+    status.append(statusText);
     copy.append(name, status);
     const scores = document.createElement("span");
     scores.className = "site-item-scores";
@@ -3274,8 +3501,10 @@ function renderSiteLibrary(renderContext) {
       if (Number.isFinite(score)) {
         fill.style.width = `${Math.max(0, Math.min(100, score))}%`;
         fill.style.backgroundColor = getSummaryBackgroundColor(mode.toLowerCase(), score, renderContext, "bar");
+        bar.style.setProperty("--confidence-color", fill.style.backgroundColor);
       }
       bar.append(fill);
+      if (summary) addConfidenceRange(bar, score, summary.ci95HalfWidth);
       const scoreLine = document.createElement("span");
       scoreLine.className = "site-score-line";
       const number = document.createElement("strong");
@@ -3293,11 +3522,21 @@ function renderSiteLibrary(renderContext) {
         estimate.textContent = required === null ? "±2 in ? runs" : summary.samples < required ? `±2 in ${required - summary.samples} runs` : summary.samples < tight ? `±1 in ${tight - summary.samples} runs` : "±1 reached";
         value.append(estimate);
       }
-      value.setAttribute("aria-label", `${mode} average ${Number.isFinite(score) ? score.toFixed(1) : "not available"}; ${Array.from(value.querySelectorAll("small"), (item) => item.textContent).join("; ")}`);
+      const baselineScore = renderContext.summariesByUrl.get(state.comparisonBaseUrl)?.[mode.toLowerCase()]?.avgScore;
+      let delta = null;
+      if (tracker.url !== state.comparisonBaseUrl && Number.isFinite(score) && Number.isFinite(baselineScore)) {
+        delta = baselineDelta(score - baselineScore, baselineScore);
+        const deltaPill = document.createElement("span");
+        deltaPill.className = "site-score-delta";
+        setBaselineDeltaLabel(deltaPill, delta);
+        value.append(deltaPill);
+      }
+      value.setAttribute("aria-label", `${mode} average ${Number.isFinite(score) ? score.toFixed(1) : "not available"}; ${Array.from(value.querySelectorAll("small"), (item) => item.textContent).join("; ")}${delta ? `; ${delta.detail}` : ""}`);
       scores.append(value);
     }
     button.append(copy, scores);
     button.addEventListener("click", () => {
+      if (suppressSiteClick) return;
       if (state.runDetail && state.runDetail.url !== tracker.url) closeRunDetailPanel();
       selectedSiteUrl = tracker.url;
       openSiteMenuUrl = null;
@@ -3305,15 +3544,34 @@ function renderSiteLibrary(renderContext) {
       render();
       document.querySelector('.site-item[aria-current="page"]')?.focus({ preventScroll: true });
     });
-    button.addEventListener("dragstart", (event) => {
-      event.dataTransfer.effectAllowed = "move";
-      event.dataTransfer.setData("text/plain", tracker.url);
+    button.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0 || event.pointerType !== "mouse") return;
+      siteDrag = { row, pointerId: event.pointerId, startY: event.clientY, pointerOffset: event.clientY - row.getBoundingClientRect().top, initialVisibleOrder: Array.from(rows.querySelectorAll(":scope > .site-row"), (item) => item.dataset.url), active: false };
     });
-    button.addEventListener("dragover", (event) => event.preventDefault());
-    button.addEventListener("drop", (event) => {
+    button.addEventListener("touchstart", (event) => {
+      if (event.touches.length !== 1) return;
+      const touch = event.changedTouches[0];
+      const drag = { row, pointerId: -touch.identifier - 1, touchId: touch.identifier, startY: touch.clientY, clientY: touch.clientY, pointerOffset: touch.clientY - row.getBoundingClientRect().top, initialVisibleOrder: Array.from(rows.querySelectorAll(":scope > .site-row"), (item) => item.dataset.url), active: false };
+      siteDrag = drag;
+      drag.holdTimer = setTimeout(() => {
+        if (siteDrag !== drag) return;
+        drag.startY = drag.clientY - 6;
+        moveSiteDrag({ pointerId: drag.pointerId, clientY: drag.clientY, preventDefault() {} });
+      }, 350);
+    }, { passive: true });
+    button.addEventListener("keydown", (event) => {
+      if (!event.altKey || !["ArrowUp", "ArrowDown"].includes(event.key)) return;
+      const other = event.key === "ArrowUp" ? row.previousElementSibling : row.nextElementSibling;
+      if (!other?.dataset.url) return;
       event.preventDefault();
-      const from = event.dataTransfer.getData("text/plain");
-      if (state.trackers.has(from) && from !== tracker.url) reorderTracker(from, tracker.url);
+      const order = getOrderedTrackerUrls();
+      const from = order.indexOf(tracker.url);
+      const to = order.indexOf(other.dataset.url);
+      [order[from], order[to]] = [order[to], order[from]];
+      state.trackerOrder = order;
+      persistState();
+      render();
+      requestAnimationFrame(() => Array.from(document.querySelectorAll(".site-row")).find((item) => item.dataset.url === tracker.url)?.querySelector(".site-item")?.focus({ preventScroll: true }));
     });
     const actions = document.createElement("div");
     actions.className = "site-row-actions";
@@ -3334,6 +3592,7 @@ function renderSiteLibrary(renderContext) {
           if (other !== menu) other.open = false;
         });
         openSiteMenuUrl = tracker.url;
+        positionSiteMenu(menu);
       }
       else if (openSiteMenuUrl === tracker.url) openSiteMenuUrl = null;
     });
@@ -3352,7 +3611,7 @@ function renderSiteLibrary(renderContext) {
     };
     const playIcon = iconMarkup(playSvg);
     const pauseIcon = iconMarkup(pauseSvg);
-    addAction(tracker.running ? "Pause" : "Resume", () => {
+    addAction(tracker.running ? "Pause" : "Start", () => {
       if (tracker.running) stopTracker(tracker);
       else if (ensureApiKeyConfigured()) startTracker(tracker, true);
       render();
@@ -3640,9 +3899,9 @@ function renderCards(renderContext) {
 
     toggleButton.classList.toggle("is-running", tracker.running);
     toggleButton.classList.toggle("is-paused", !tracker.running);
-    toggleButton.innerHTML = `${tracker.running ? iconPause : iconPlay}<span>${tracker.running ? "Pause" : "Resume"}</span>`;
-    toggleButton.setAttribute("aria-label", tracker.running ? "Pause" : "Resume");
-    toggleButton.dataset.tooltip = tracker.running ? "Pause" : "Resume";
+    toggleButton.innerHTML = `${tracker.running ? iconPause : iconPlay}<span>${tracker.running ? "Pause" : "Start"}</span>`;
+    toggleButton.setAttribute("aria-label", tracker.running ? "Pause" : "Start");
+    toggleButton.dataset.tooltip = tracker.running ? "Pause" : "Start";
     attachTooltipHandlers(toggleButton);
     toggleButton.addEventListener("click", () => {
       if (tracker.running) {
@@ -3901,7 +4160,7 @@ function renderComparisonTable(renderContext) {
     const scoreAvgCell = document.createElement("td");
     scoreAvgCell.className = "comparison-color-cell comparison-score-cell";
     scoreAvgCell.textContent = rowData.summary.avgScore.toFixed(1);
-    scoreAvgCell.prepend(createPaneProgress(rowData.summary.avgScore, getSummaryBackgroundColor(rowData.mode, rowData.summary.avgScore, renderContext, "bar")));
+    scoreAvgCell.prepend(createPaneProgress(rowData.summary.avgScore, getSummaryBackgroundColor(rowData.mode, rowData.summary.avgScore, renderContext, "bar"), rowData.summary.ci95HalfWidth));
     row.append(scoreAvgCell);
 
     const confidenceCell = document.createElement("td");
@@ -3929,7 +4188,7 @@ function renderComparisonTable(renderContext) {
         rowData.mode,
         false,
       );
-      bubble.prepend(metricProgress(metric, metricResult.avgValue, rowData.mode, metricColor));
+      addMetricProgress(bubble, metric, metricResult, rowData.mode, metricColor);
       metricCell.append(bubble);
       row.append(metricCell);
     }
@@ -3943,7 +4202,7 @@ function refreshLiveStatusText() {
     const tracker = state.trackers.get(row.dataset.url);
     const status = row.querySelector(".site-status");
     if (tracker && status) {
-      status.textContent = `● ${describeTrackerStatus(tracker)}${state.comparisonBaseUrl === tracker.url ? " · Baseline" : ""}`;
+      status.querySelector(".site-status-text").textContent = `${tracker.running ? "" : "● "}${describeTrackerStatus(tracker)}${state.comparisonBaseUrl === tracker.url ? " · Baseline" : ""}`;
     }
   }
   for (const card of urlCardsContainer.querySelectorAll(".url-card[data-url]")) {
@@ -3969,6 +4228,7 @@ function serializeTracker(tracker) {
     running: tracker.running,
     history: tracker.history,
     lastError: tracker.lastError,
+    runErrors: tracker.runErrors,
     phase: tracker.phase,
     activeStrategy: tracker.activeStrategy,
     pauseReason: tracker.pauseReason,
@@ -4053,7 +4313,14 @@ function hydrateState() {
           mobile: Array.isArray(stored.history?.mobile) ? stored.history.mobile : [],
           desktop: Array.isArray(stored.history?.desktop) ? stored.history.desktop : [],
         };
-        tracker.lastError = typeof stored.lastError === "string" ? stored.lastError : "";
+        const legacyError = typeof stored.lastError === "string" ? stored.lastError : "";
+        const legacyRunError = /^(mobile|desktop):\s*(.*)$/i.exec(legacyError);
+        tracker.lastError = legacyRunError ? "" : legacyError;
+        for (const strategy of STRATEGIES) {
+          tracker.runErrors[strategy] = typeof stored.runErrors?.[strategy] === "string"
+            ? stored.runErrors[strategy]
+            : legacyRunError?.[1].toLowerCase() === strategy ? legacyRunError[2] : "";
+        }
         tracker.running = stored.running === true;
         tracker.phase = typeof stored.phase === "string" ? stored.phase : (tracker.running ? "queued" : "paused");
         if (tracker.phase === "cooldown") {
@@ -4084,12 +4351,6 @@ function hydrateState() {
   }
 }
 
-let showFirstRunIntro = false;
-try {
-  showFirstRunIntro = !localStorage.getItem(STORAGE_KEY) && !localStorage.getItem("pagespeeder-onboarding-seen");
-} catch (error) {
-  console.warn("Failed to check onboarding state", error);
-}
 hydrateState();
 applyThemeMode();
 syncGlimmDevPanel();
@@ -4097,12 +4358,15 @@ scheduleGlimmAutoplay();
 updateShopifyPbSuggestion();
 for (const tracker of state.trackers.values()) {
   if (tracker.running) {
+    const wasAutoPauseArmed = tracker.autoPauseArmed;
+    tracker.running = false;
     startTracker(tracker);
+    tracker.autoPauseArmed = wasAutoPauseArmed;
+    persistState();
   }
 }
 
 render();
-if (showFirstRunIntro) {
-  try { localStorage.setItem("pagespeeder-onboarding-seen", "1"); } catch (error) { console.warn("Failed to save onboarding state", error); }
+if (state.trackers.size === 0 && !hasApiKey()) {
   openApiKeyDialog({ onboarding: true });
 }

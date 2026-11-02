@@ -65,7 +65,7 @@
           </button>
         </fieldset>
         <button id="start-all" type="button">Start All</button>
-        <button id="stop-all" type="button" class="secondary">Stop All</button>
+        <button id="stop-all" type="button" class="secondary">Pause All</button>
       </div>
     </header>
 
@@ -340,8 +340,9 @@
             </svg>
           </button>
         </div>
-        <p id="api-key-intro" class="dialog-copy" hidden>Track your site's performance over time and compare mobile and desktop results. To get started, add a Google PageSpeed Insights API key.</p>
+        <p id="api-key-intro" class="dialog-copy" hidden>Compare mobile and desktop PageSpeed performance across URLs. Scores can vary between runs, so PageSpeeder averages reports every minute until they reach statistical significance or you pause them.</p>
         <p id="api-key-storage-copy" class="dialog-copy">
+          <span id="api-key-get-started" hidden>To get started, add a Google PageSpeed Insights API key. </span>
           Your key is saved in this browser's localStorage and sent directly to Google's PageSpeed
           Insights API when you run an audit.
         </p>
@@ -351,7 +352,7 @@
         </div>
         <label>
           <span class="field-label-line">API key</span>
-          <input id="api-key" name="apiKey" type="password" placeholder="AIza..." required />
+          <input id="api-key" name="apiKey" type="password" placeholder="AIza..." autocomplete="off" data-1p-ignore data-bwignore data-lpignore="true" data-form-type="other" required />
         </label>
         <div class="dialog-actions">
           <button id="skip-setup" type="button" class="secondary" hidden>Maybe later</button>
