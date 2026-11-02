@@ -11,6 +11,7 @@
     "vite": "^5.4.14"
   },
   "dependencies": {
-    "glimm": "^0.1.3"
+    "glimm": "^0.1.3",
+    "lucide-static": "^1.66.0"
   }
 }

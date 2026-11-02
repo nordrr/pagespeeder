@@ -4,12 +4,6 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PageSpeeder</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;800&family=Roboto+Mono:wght@400;500;700;800&display=swap"
-      rel="stylesheet"
-    />
     <script>
       (() => {
         try {
@@ -29,8 +23,16 @@
       })();
     </script>
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="workspace.css" />
   </head>
   <body>
+    <aside class="workspace-rail" aria-label="Main navigation">
+      <div class="rail-brand" aria-hidden="true">PS</div>
+      <nav class="workspace-nav">
+        <button type="button" class="workspace-tab selected" data-view="sites" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/></svg><span>Sites</span></button>
+        <button type="button" class="workspace-tab" data-view="comparison"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 19V9m5 10V5m5 14v-7m5 7V3"/></svg><span>Compare</span></button>
+      </nav>
+    </aside>
     <header class="page-header">
       <div class="brand-lockup">
         <span class="brand-mark" aria-hidden="true">PS</span>
@@ -187,20 +189,15 @@
       </button>
     </aside>
 
-    <main>
-      <section class="panel launch-panel">
-        <div class="launch-copy">
-          <p class="eyebrow">PageSpeed Insights sampling</p>
-          <h2>Measure any page with repeat runs.</h2>
-          <p>
-            Enter a URL and PageSpeeder will keep testing it until the average becomes useful,
-            so you can tell whether a change really moved your score.
-          </p>
-        </div>
-        <form id="add-url-form" autocomplete="off">
+    <aside class="site-library" aria-label="Tracked sites">
+      <div class="library-heading"><div><h2>Sites</h2><p id="site-count">0 sites</p></div><div class="library-bulk-actions"><button id="color-mode" type="button" class="secondary" aria-describedby="color-mode-description"></button><span id="color-mode-description" class="sr-only">Absolute colors reflect each score. Relative colors compare results with other sites, or with the selected baseline.</span><button id="clear-runs" type="button" class="secondary">Clear Runs</button><button id="delete-all-sites" type="button" class="secondary danger">Delete All Sites</button></div></div>
+      <label class="library-search"><span class="sr-only">Search sites</span><input id="site-search" type="search" placeholder="Search sites…" /></label>
+      <div class="library-section-label"><span>Tracked sites</span><span>Mobile</span><span>Desktop</span></div>
+      <div id="site-list" class="site-list"><span id="site-selection" class="site-selection" aria-hidden="true" hidden></span><div id="site-list-rows"></div></div>
+      <div class="library-add"><div class="library-add-blur" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div><form id="add-url-form" autocomplete="off">
           <label>
             <span class="field-label-line">URL to track</span>
-            <input id="url-input" name="url" type="url" placeholder="https://example.com" required />
+            <input id="url-input" name="url" type="url" aria-label="URL to track" placeholder="https://example.com" required />
           </label>
           <p id="shopify-pb-suggestion" class="inline-hint" hidden>
             Shopify preview URL detected.
@@ -209,25 +206,16 @@
             </button>
           </p>
           <button type="submit">Add and Start</button>
-          <p id="setup-hint" class="setup-hint">
-            Add your Google PageSpeed API key before the first run.
-          </p>
-        </form>
-      </section>
-
-      <section class="panel">
-        <div class="section-title-row">
-          <h2>Tracked URLs</h2>
-          <div class="section-title-actions">
-            <button id="toggle-details" type="button" class="secondary">Hide Details</button>
-            <button id="clear-all" type="button" class="secondary danger">Clear All Data</button>
-          </div>
-        </div>
+        </form></div>
+    </aside>
+    <main>
+      <section id="sites-view" class="sites-view">
         <div id="url-cards" class="url-cards"></div>
       </section>
-
-      <section class="panel">
-        <h2>Comparison Table</h2>
+      <div id="score-history-slot"></div>
+      <div id="run-detail-slot"></div>
+      <section class="comparison-view" id="comparison-view" hidden>
+        <div class="view-heading"><h1>Comparison</h1><p>Compare performance across your tracked sites.</p></div>
         <div class="table-wrap">
           <table id="comparison-table">
             <thead>
@@ -253,6 +241,7 @@
         </div>
       </section>
     </main>
+    <div id="comparison-add-slot" class="comparison-add-slot" hidden></div>
 
     <template id="url-card-template">
       <article class="url-card">
@@ -276,12 +265,12 @@
             </div>
             <input class="url-label-input" type="text" maxlength="80" placeholder="Add a label" />
             <p class="url-card-meta"></p>
+            <button class="remove icon-btn danger" type="button" aria-label="Remove site"></button>
           </div>
           <div class="url-card-actions">
             <button class="toggle-run icon-btn" type="button" aria-label="Pause"></button>
             <button class="run-now icon-btn secondary" type="button" aria-label="Run now"></button>
             <button class="set-baseline icon-btn secondary" type="button" aria-label="Set comparison baseline"></button>
-            <button class="remove icon-btn danger" type="button" aria-label="Remove"></button>
           </div>
         </header>
         <div class="url-card-content">
@@ -298,7 +287,7 @@
                 <p class="tile-meta">±-- • 0 runs</p>
               </article>
             </div>
-            <table class="metric-summary-table">
+            <div class="metric-table-wrap"><table class="metric-summary-table">
               <thead>
                 <tr>
                   <th>Metric</th>
@@ -307,11 +296,13 @@
                 </tr>
               </thead>
               <tbody class="metric-summary-body"></tbody>
-            </table>
+            </table></div>
           </section>
           <section class="score-history-section">
             <h4>Score Runs</h4>
             <div class="score-history-scroll">
+              <span class="run-selection" aria-hidden="true" hidden></span>
+              <span class="run-selection-shadow" aria-hidden="true" hidden></span>
               <table class="score-history-table">
                 <thead>
                   <tr>
@@ -329,37 +320,41 @@
       </article>
     </template>
 
-    <div id="run-detail-backdrop" class="run-detail-backdrop" hidden></div>
+    <dialog id="bulk-action-dialog" class="settings-dialog bulk-action-dialog" aria-labelledby="bulk-action-title" aria-describedby="bulk-action-description">
+      <form id="bulk-action-form">
+        <h2 id="bulk-action-title"></h2>
+        <p id="bulk-action-description" class="dialog-copy"></p>
+        <div class="dialog-actions">
+          <button id="bulk-action-cancel" type="button" class="secondary">Cancel</button>
+          <button id="bulk-action-confirm" type="submit" class="danger">Confirm</button>
+        </div>
+      </form>
+    </dialog>
     <dialog id="api-key-dialog" class="settings-dialog" aria-labelledby="api-key-dialog-title">
       <form id="settings-form" method="dialog" autocomplete="off">
         <div class="dialog-header">
-          <div>
-            <p class="eyebrow">Private setup</p>
-            <h2 id="api-key-dialog-title">Google PageSpeed API Key</h2>
-          </div>
+          <h2 id="api-key-dialog-title">Google PageSpeed API key</h2>
           <button id="api-key-dialog-close" type="button" class="icon-btn secondary" aria-label="Close settings">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M6.7 5.3 12 10.6l5.3-5.3 1.4 1.4-5.3 5.3 5.3 5.3-1.4 1.4-5.3-5.3-5.3 5.3-1.4-1.4 5.3-5.3-5.3-5.3 1.4-1.4Z"></path>
             </svg>
           </button>
         </div>
-        <p class="dialog-copy">
+        <p id="api-key-intro" class="dialog-copy" hidden>Track your site's performance over time and compare mobile and desktop results. To get started, add a Google PageSpeed Insights API key.</p>
+        <p id="api-key-storage-copy" class="dialog-copy">
           Your key is saved in this browser's localStorage and sent directly to Google's PageSpeed
           Insights API when you run an audit.
         </p>
+        <div class="api-key-info">
+          <p>Need an API key? Follow Google's setup guide to create one.</p>
+          <a href="https://developers.google.com/speed/docs/insights/v5/get-started" target="_blank" rel="noopener noreferrer">Get a key from Google <span aria-hidden="true">↗</span></a>
+        </div>
         <label>
-          <span class="field-label-line">
-            API key
-            <a
-              class="inline-link-btn"
-              href="https://developers.google.com/speed/docs/insights/v5/get-started"
-              target="_blank"
-              rel="noopener noreferrer"
-            >Get one from Google</a>
-          </span>
+          <span class="field-label-line">API key</span>
           <input id="api-key" name="apiKey" type="password" placeholder="AIza..." required />
         </label>
         <div class="dialog-actions">
+          <button id="skip-setup" type="button" class="secondary" hidden>Maybe later</button>
           <button id="clear-api-key" type="button" class="secondary danger">Remove Key</button>
           <button type="submit">Save Key</button>
         </div>
@@ -368,15 +363,14 @@
     <aside
       id="run-detail-panel"
       class="run-detail-panel"
-      role="dialog"
-      aria-modal="true"
+      role="region"
       aria-labelledby="run-detail-title"
       aria-hidden="true"
       tabindex="-1"
     >
       <header class="run-detail-header">
         <h2 id="run-detail-title">Run Details</h2>
-        <button id="run-detail-close" type="button" class="secondary">Close</button>
+        <button id="run-detail-close" type="button" class="secondary icon-btn" aria-label="Close run details" title="Close run details"></button>
       </header>
       <div id="run-detail-content" class="run-detail-content">
         <p class="placeholder">Click any score in Score Runs to inspect that single run.</p>

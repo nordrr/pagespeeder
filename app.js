@@ -1,4 +1,29 @@
 import { createMeshShader, createNamedropShader, createShader, playSweep } from "glimm";
+import playSvg from "lucide-static/icons/play.svg?raw";
+import pauseSvg from "lucide-static/icons/pause.svg?raw";
+import zapSvg from "lucide-static/icons/zap.svg?raw";
+import targetSvg from "lucide-static/icons/target.svg?raw";
+import trashSvg from "lucide-static/icons/trash-2.svg?raw";
+import dashboardSvg from "lucide-static/icons/layout-dashboard.svg?raw";
+import chartSvg from "lucide-static/icons/chart-no-axes-column-increasing.svg?raw";
+import monitorSvg from "lucide-static/icons/monitor.svg?raw";
+import sunSvg from "lucide-static/icons/sun.svg?raw";
+import moonSvg from "lucide-static/icons/moon.svg?raw";
+import closeSvg from "lucide-static/icons/x.svg?raw";
+import ellipsisSvg from "lucide-static/icons/ellipsis.svg?raw";
+
+const iconMarkup = (svg) => svg.replace("<svg", '<svg aria-hidden="true"');
+for (const [selector, icon] of [
+  ['.workspace-tab[data-view="sites"] svg', dashboardSvg],
+  ['.workspace-tab[data-view="comparison"] svg', chartSvg],
+  ['.theme-mode-button[data-theme-mode="auto"] svg', monitorSvg],
+  ['.theme-mode-button[data-theme-mode="light"] svg', sunSvg],
+  ['.theme-mode-button[data-theme-mode="dark"] svg', moonSvg],
+  ['#api-key-dialog-close svg', closeSvg],
+]) {
+  const original = document.querySelector(selector);
+  if (original) original.outerHTML = iconMarkup(icon);
+}
 
 const PSI_ENDPOINT = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed";
 const STRATEGIES = ["mobile", "desktop"];
@@ -86,6 +111,7 @@ const state = {
   trackers: new Map(),
   trackerOrder: [],
   comparisonBaseUrl: null,
+  colorMode: "absolute",
   showDetails: true,
   sort: {
     key: null,
@@ -128,7 +154,14 @@ const sortableHeaders = Array.from(document.querySelectorAll("#comparison-table 
 const comparisonBody = document.getElementById("comparison-body");
 const startAllButton = document.getElementById("start-all");
 const stopAllButton = document.getElementById("stop-all");
-const clearAllButton = document.getElementById("clear-all");
+const clearRunsButton = document.getElementById("clear-runs");
+const colorModeButton = document.getElementById("color-mode");
+const deleteAllSitesButton = document.getElementById("delete-all-sites");
+const bulkActionDialog = document.getElementById("bulk-action-dialog");
+const bulkActionForm = document.getElementById("bulk-action-form");
+const bulkActionTitle = document.getElementById("bulk-action-title");
+const bulkActionDescription = document.getElementById("bulk-action-description");
+const bulkActionConfirm = document.getElementById("bulk-action-confirm");
 const toggleDetailsButton = document.getElementById("toggle-details");
 const themeModeButtons = Array.from(document.querySelectorAll(".theme-mode-button[data-theme-mode]"));
 const glimmDevPanel = document.getElementById("glimm-dev-panel");
@@ -140,14 +173,14 @@ const apiKeyStatus = document.getElementById("api-key-status");
 const setupHint = document.getElementById("setup-hint");
 const apiKeyDialog = document.getElementById("api-key-dialog");
 const apiKeyDialogCloseButton = document.getElementById("api-key-dialog-close");
+const skipSetupButton = document.getElementById("skip-setup");
 const clearApiKeyButton = document.getElementById("clear-api-key");
 const saveApiKeyButton = settingsForm?.querySelector('button[type="submit"]');
-const runDetailBackdrop = document.getElementById("run-detail-backdrop");
 const runDetailPanel = document.getElementById("run-detail-panel");
 const runDetailCloseButton = document.getElementById("run-detail-close");
 const runDetailContent = document.getElementById("run-detail-content");
-const pageHeaderElement = document.querySelector(".page-header");
-const mainContentElement = document.querySelector("main");
+runDetailCloseButton.innerHTML = iconMarkup(closeSvg);
+document.getElementById("run-detail-slot").append(runDetailPanel);
 const uiTooltip = document.getElementById("ui-tooltip");
 const SORTABLE_KEYS = new Set(["url", "mode", "avgScore", "confidence", "samples", "fcp", "si", "lcp", "tbt", "cls"]);
 const TOOLTIP_DELAY_MS = 250;
@@ -158,7 +191,7 @@ const DRAG_PREVIEW_SCALE = 0.25;
 const DRAG_PREVIEW_OFFSET = 10;
 const DRAG_PREVIEW_FADE_IN_MS = 90;
 const DRAG_PREVIEW_FADE_OUT_MS = 140;
-const ICON_BASELINE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 2h2v3.06A7.002 7.002 0 0 1 18.94 11H22v2h-3.06A7.002 7.002 0 0 1 13 18.94V22h-2v-3.06A7.002 7.002 0 0 1 5.06 13H2v-2h3.06A7.002 7.002 0 0 1 11 5.06V2Zm1 5a5 5 0 1 0 0 10 5 5 0 0 0 0-10Zm0 2.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5Z"/></svg>';
+const ICON_BASELINE = iconMarkup(targetSvg);
 
 let tooltipAnchor = null;
 let tooltipShowTimerId = null;
@@ -173,23 +206,19 @@ let dragEndCleanupTimerId = null;
 let transparentDragImage = null;
 let pendingLabelEditUrl = null;
 let pendingAddUrlAfterKey = null;
+let selectedSiteUrl = null;
+let openSiteMenuUrl = null;
 let runDetailReturnFocusElement = null;
 let suppressLabelBlurCommit = false;
 let skipLabelEditRestoreOnNextRender = false;
-let clearAllConfirmArmed = false;
-let clearAllConfirmReadyAt = 0;
-let clearAllConfirmLockTimerId = null;
-let clearAllConfirmExpireTimerId = null;
+let pendingBulkAction = null;
+let pendingSiteRemovalUrl = null;
 let themeSweepController = null;
 let themeSweepHandle = null;
 let themeSweepShaderType = null;
 let glimmAutoplayTimerId = null;
 const systemThemeQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
-if (runDetailBackdrop) {
-  // Keep mounted so CSS opacity/visibility transitions can animate.
-  runDetailBackdrop.hidden = false;
-}
 
 function getResolvedTheme(mode) {
   if (mode === "dark") {
@@ -491,10 +520,24 @@ function hydrateGlimmDevState(settings) {
 runDetailCloseButton?.addEventListener("click", () => {
   closeRunDetailPanel();
 });
-runDetailBackdrop?.addEventListener("click", () => {
-  closeRunDetailPanel();
+colorModeButton.dataset.tooltip = document.getElementById("color-mode-description").textContent;
+attachTooltipHandlers(colorModeButton);
+colorModeButton.addEventListener("click", () => {
+  state.colorMode = state.colorMode === "absolute" ? "relative" : "absolute";
+  persistState();
+  render();
+  colorModeButton.focus({ preventScroll: true });
 });
 document.addEventListener("keydown", (event) => {
+  document.body.classList.add("keyboard-input");
+  if (event.key === "Escape" && !state.runDetail) {
+    const openMenu = document.querySelector(".site-menu[open]");
+    if (openMenu) {
+      openMenu.open = false;
+      openSiteMenuUrl = null;
+      openMenu.querySelector("summary")?.focus();
+    }
+  }
   if (!state.runDetail) {
     return;
   }
@@ -502,9 +545,6 @@ document.addEventListener("keydown", (event) => {
     event.preventDefault();
     closeRunDetailPanel();
     return;
-  }
-  if (event.key === "Tab") {
-    trapFocusInRunDetail(event);
   }
 });
 document.addEventListener("dragover", (event) => {
@@ -555,32 +595,26 @@ glimmDevAutoplayButton?.addEventListener("click", () => {
 });
 
 document.addEventListener("pointerdown", (event) => {
+  document.body.classList.remove("keyboard-input");
   const target = event.target;
   if (!(target instanceof Element)) {
     return;
   }
+  if (!target.closest(".site-menu")) {
+    document.querySelectorAll(".site-menu[open]").forEach((menu) => { menu.open = false; });
+    openSiteMenuUrl = null;
+  }
   let changed = false;
   const removeButton = target.closest(".remove");
-  const removeCard = removeButton?.closest(".url-card[data-url]");
+  const removeCard = removeButton?.closest(".url-card[data-url], .site-row[data-url]");
   const keepArmedUrl = removeCard?.dataset.url || null;
   if (disarmAllTrackerRemovals(keepArmedUrl)) {
-    changed = true;
-  }
-  const keepClearAllArmed = Boolean(target.closest("#clear-all"));
-  if (!keepClearAllArmed && clearAllConfirmArmed) {
-    disarmClearAllRemoval();
     changed = true;
   }
   if (changed) {
     render();
   }
 }, true);
-
-if (clearAllButton) {
-  clearAllButton.dataset.tooltip = "Clear all data";
-  clearAllButton.setAttribute("aria-label", "Clear all data");
-  attachTooltipHandlers(clearAllButton);
-}
 
 for (const header of sortableHeaders) {
   header.tabIndex = 0;
@@ -648,6 +682,8 @@ function addTrackerAndStart(cleanedUrl) {
   runWithViewTransition(() => {
     const tracker = createTracker(cleanedUrl);
     state.trackers.set(cleanedUrl, tracker);
+    selectedSiteUrl = cleanedUrl;
+    if (!document.body.classList.contains("comparison-active")) setWorkspaceView("sites");
     state.trackerOrder.push(cleanedUrl);
     startTracker(tracker, true);
     persistState();
@@ -680,6 +716,7 @@ openSettingsButton?.addEventListener("click", () => {
 apiKeyDialogCloseButton?.addEventListener("click", () => {
   closeApiKeyDialog();
 });
+skipSetupButton?.addEventListener("click", closeApiKeyDialog);
 
 apiKeyDialog?.addEventListener("click", (event) => {
   if (event.target === apiKeyDialog) {
@@ -723,32 +760,63 @@ stopAllButton.addEventListener("click", () => {
   render();
 });
 
-clearAllButton.addEventListener("click", () => {
-  if (!clearAllConfirmArmed) {
-    hideTooltip();
-    armClearAllRemoval();
-    render();
-    requestAnimationFrame(() => {
-      if (clearAllConfirmArmed) {
-        showTooltip("Really remove?", clearAllButton, true);
-      }
-    });
-    return;
-  }
-  if (Date.now() < clearAllConfirmReadyAt) {
-    return;
-  }
-  disarmClearAllRemoval();
+function openBulkActionDialog(action) {
+  pendingSiteRemovalUrl = null;
+  pendingBulkAction = action;
+  const clearRuns = action === "clear-runs";
+  bulkActionTitle.textContent = clearRuns ? "Clear all runs?" : "Delete all sites?";
+  bulkActionDescription.textContent = clearRuns
+    ? "Remove all saved run history and scores. Your sites, labels, and baseline stay in place. Running sites continue on schedule; results already in progress are discarded."
+    : "Delete every tracked site and its run history. Tracking will stop. Your API key and appearance settings stay in this browser.";
+  bulkActionConfirm.textContent = clearRuns ? "Clear Runs" : "Delete All Sites";
+  bulkActionDialog.showModal();
+  document.getElementById("bulk-action-cancel").focus();
+}
+
+function openRemoveSiteDialog(tracker) {
   hideTooltip();
+  pendingBulkAction = "remove-site";
+  pendingSiteRemovalUrl = tracker.url;
+  bulkActionTitle.textContent = "Remove site?";
+  bulkActionDescription.textContent = `Remove ${tracker.label || tracker.url} and its saved run history? Tracking will stop.`;
+  bulkActionConfirm.textContent = "Remove Site";
+  bulkActionDialog.showModal();
+  document.getElementById("bulk-action-cancel").focus();
+}
 
-  for (const tracker of state.trackers.values()) {
-    stopTracker(tracker);
+clearRunsButton.addEventListener("click", () => openBulkActionDialog("clear-runs"));
+deleteAllSitesButton.addEventListener("click", () => openBulkActionDialog("delete-sites"));
+document.getElementById("bulk-action-cancel").addEventListener("click", () => bulkActionDialog.close());
+bulkActionDialog.addEventListener("close", () => { pendingBulkAction = null; pendingSiteRemovalUrl = null; });
+bulkActionForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const action = pendingBulkAction;
+  if (!action) return;
+  if (action === "remove-site") {
+    const url = pendingSiteRemovalUrl;
+    bulkActionDialog.close();
+    if (url) removeTracker(url);
+    return;
   }
-
-  state.trackers.clear();
-  state.trackerOrder = [];
-  state.comparisonBaseUrl = null;
-  closeRunDetailPanel();
+  for (const tracker of state.trackers.values()) {
+    tracker.historyVersion += 1;
+    if (action === "clear-runs") {
+      tracker.history = { mobile: [], desktop: [] };
+      tracker.autoPauseArmed = false;
+      tracker.pauseReason = null;
+    } else {
+      disarmTrackerRemoval(tracker);
+      stopTracker(tracker);
+    }
+  }
+  if (action === "delete-sites") {
+    state.trackers.clear();
+    state.trackerOrder = [];
+    state.comparisonBaseUrl = null;
+    selectedSiteUrl = null;
+  }
+  if (state.runDetail) closeRunDetailPanel();
+  bulkActionDialog.close();
   persistState();
   render();
 });
@@ -786,9 +854,14 @@ function openApiKeyDialog(options = {}) {
     return;
   }
   pendingAddUrlAfterKey = options.pendingUrl || null;
+  const onboarding = options.onboarding === true;
+  document.getElementById("api-key-dialog-title").textContent = onboarding ? "Welcome to PageSpeeder" : "Google PageSpeed API key";
+  document.getElementById("api-key-intro").hidden = !onboarding;
+  skipSetupButton.hidden = !onboarding;
+  clearApiKeyButton.hidden = onboarding;
   apiKeyInput.value = state.apiKey;
   if (saveApiKeyButton) {
-    saveApiKeyButton.textContent = pendingAddUrlAfterKey ? "Save Key & Start" : "Save Key";
+    saveApiKeyButton.textContent = pendingAddUrlAfterKey ? "Save Key & Start" : onboarding ? "Save and continue" : "Save Key";
   }
   if (!apiKeyDialog.open) {
     apiKeyDialog.showModal();
@@ -836,6 +909,7 @@ function createTracker(url) {
     label: "",
     running: false,
     inFlight: false,
+    historyVersion: 0,
     timerId: null,
     nextRunAt: null,
     history: {
@@ -1017,57 +1091,6 @@ function armTrackerRemoval(tracker) {
     }
     disarmTrackerRemoval(tracker, true);
   }, REMOVE_CONFIRM_ARM_TTL_MS);
-}
-
-function disarmClearAllRemoval(shouldRender = false) {
-  if (clearAllConfirmLockTimerId) {
-    clearTimeout(clearAllConfirmLockTimerId);
-    clearAllConfirmLockTimerId = null;
-  }
-  if (clearAllConfirmExpireTimerId) {
-    clearTimeout(clearAllConfirmExpireTimerId);
-    clearAllConfirmExpireTimerId = null;
-  }
-
-  clearAllConfirmArmed = false;
-  clearAllConfirmReadyAt = 0;
-  if (shouldRender) {
-    render();
-  }
-}
-
-function armClearAllRemoval() {
-  disarmAllTrackerRemovals();
-  disarmClearAllRemoval();
-  clearAllConfirmArmed = true;
-  clearAllConfirmReadyAt = Date.now() + REMOVE_CONFIRM_LOCKOUT_MS;
-
-  clearAllConfirmLockTimerId = setTimeout(() => {
-    clearAllConfirmLockTimerId = null;
-    if (!clearAllConfirmArmed) {
-      return;
-    }
-    render();
-  }, REMOVE_CONFIRM_LOCKOUT_MS);
-
-  clearAllConfirmExpireTimerId = setTimeout(() => {
-    if (!clearAllConfirmArmed) {
-      return;
-    }
-    disarmClearAllRemoval(true);
-  }, REMOVE_CONFIRM_ARM_TTL_MS);
-}
-
-function updateClearAllButtonState() {
-  if (!clearAllButton) {
-    return;
-  }
-  const locked = clearAllConfirmArmed && Date.now() < clearAllConfirmReadyAt;
-  clearAllButton.classList.toggle("remove-confirm", clearAllConfirmArmed);
-  clearAllButton.disabled = locked;
-  const label = clearAllConfirmArmed ? "Really remove?" : "Clear all data";
-  clearAllButton.dataset.tooltip = label;
-  clearAllButton.setAttribute("aria-label", label);
 }
 
 function getOrderedTrackerUrls() {
@@ -1517,6 +1540,7 @@ async function runCycle(tracker) {
   tracker.phase = "running";
   tracker.activeStrategy = null;
   const cycleStartedAt = Date.now();
+  const historyVersion = tracker.historyVersion;
   render();
   persistState();
 
@@ -1532,6 +1556,7 @@ async function runCycle(tracker) {
   const strategyRuns = cycleStrategies.map((strategy) => (async () => {
     try {
       const sample = await fetchPsiSample(tracker.url, strategy, state.apiKey);
+      if (tracker.historyVersion !== historyVersion) return;
       const previousSample = tracker.history[strategy].at(-1) || null;
       if (!isDuplicateSample(previousSample, sample)) {
         tracker.history[strategy].push(sample);
@@ -1539,6 +1564,7 @@ async function runCycle(tracker) {
       tracker.lastError = "";
       persistState();
     } catch (error) {
+      if (tracker.historyVersion !== historyVersion) return;
       tracker.lastError = `${strategy}: ${error.message}`;
       persistState();
     } finally {
@@ -1955,80 +1981,45 @@ function mixColor(from, to, ratio) {
   return `rgb(${red} ${green} ${blue})`;
 }
 
-function parseColorToRgbArray(color) {
-  if (!color || typeof color !== "string") {
-    return null;
-  }
-
-  const trimmed = color.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  if (trimmed.startsWith("#")) {
-    const hex = trimmed.slice(1);
-    if (hex.length === 3) {
-      const r = Number.parseInt(hex[0] + hex[0], 16);
-      const g = Number.parseInt(hex[1] + hex[1], 16);
-      const b = Number.parseInt(hex[2] + hex[2], 16);
-      if ([r, g, b].every(Number.isFinite)) {
-        return [r, g, b];
-      }
-      return null;
-    }
-    if (hex.length === 6) {
-      const r = Number.parseInt(hex.slice(0, 2), 16);
-      const g = Number.parseInt(hex.slice(2, 4), 16);
-      const b = Number.parseInt(hex.slice(4, 6), 16);
-      if ([r, g, b].every(Number.isFinite)) {
-        return [r, g, b];
-      }
-      return null;
-    }
-    return null;
-  }
-
-  if (trimmed.startsWith("rgb")) {
-    const components = trimmed.match(/[\d.]+/g);
-    if (!components || components.length < 3) {
-      return null;
-    }
-    const r = Number.parseFloat(components[0]);
-    const g = Number.parseFloat(components[1]);
-    const b = Number.parseFloat(components[2]);
-    if ([r, g, b].every(Number.isFinite)) {
-      return [Math.round(r), Math.round(g), Math.round(b)];
-    }
-  }
-
-  return null;
+function createPaneProgress(value, color) {
+  const track = document.createElement("span");
+  track.className = "pane-progress";
+  track.setAttribute("aria-hidden", "true");
+  const fill = document.createElement("span");
+  fill.className = "pane-progress-fill";
+  fill.style.width = `${Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0))}%`;
+  fill.style.backgroundColor = color;
+  track.append(fill);
+  return track;
 }
 
-function getPercentilePalette() {
+function metricProgress(metric, value, mode, color) {
+  const contribution = metricContribution(mode, metric.key, value);
+  return createPaneProgress(contribution ? (contribution.points / contribution.maxPoints) * 100 : 0, color);
+}
+
+function getScorePalette(kind = "surface") {
   const isDark = document.documentElement.dataset.theme === "dark";
-  const themeBgRaw = getComputedStyle(document.documentElement).getPropertyValue("--bg");
-  const themeBg = parseColorToRgbArray(themeBgRaw);
+  const bar = isDark
+    ? { low: [239, 133, 130], mid: [243, 189, 96], high: [99, 200, 161], neutral: [154, 164, 178] }
+    : { low: [225, 100, 100], mid: [217, 154, 43], high: [50, 166, 124], neutral: [137, 148, 162] };
+  if (kind === "bar") return bar;
 
-  if (isDark) {
-    return {
-      low: [186, 86, 86],
-      mid: themeBg || [11, 18, 32],
-      high: [79, 165, 126],
-    };
-  }
-  return {
-    low: [223, 122, 114],
-    mid: themeBg || [242, 244, 248],
-    high: [99, 188, 147],
-  };
+  // Use the same hues as the site bars, softened against the page surface.
+  const canvas = isDark ? [34, 38, 45] : [255, 255, 255];
+  const strength = isDark ? 0.4 : 0.36;
+  return Object.fromEntries(Object.entries(bar).map(([key, color]) => [
+    key,
+    color.map((channel, index) => Math.round(canvas[index] + (channel - canvas[index]) * strength)),
+  ]));
 }
 
-function percentileColor(percentile) {
+function percentileColor(percentile, kind = "surface") {
   if (!Number.isFinite(percentile)) {
     return "";
   }
 
-  const { low, mid, high } = getPercentilePalette();
+  const { low, mid, high } = getScorePalette(kind);
   const p = Math.max(0, Math.min(100, percentile));
 
   if (p <= 50) {
@@ -2037,46 +2028,62 @@ function percentileColor(percentile) {
   return mixColor(mid, high, (p - 50) / 50);
 }
 
-function relativeDeltaColor(delta, maxAbsDelta) {
+function absoluteScoreColor(score, kind = "surface") {
+  if (!Number.isFinite(score)) return "";
+  const { low, mid, high } = getScorePalette(kind);
+  if (score <= 50) return mixColor(low, low, 0);
+  if (score <= 70) return mixColor(low, mid, (score - 50) / 20);
+  return mixColor(mid, high, (score - 70) / 20);
+}
+
+function relativeDeltaColor(delta, maxAbsDelta, kind = "surface") {
   if (!Number.isFinite(delta)) {
     return "";
   }
-  const { low, mid, high } = getPercentilePalette();
+  const { low, neutral, high } = getScorePalette(kind);
   if (!Number.isFinite(maxAbsDelta) || maxAbsDelta <= 0) {
-    return mixColor(mid, mid, 0);
+    return mixColor(neutral, neutral, 0);
   }
   const ratio = Math.max(-1, Math.min(1, delta / maxAbsDelta));
   if (ratio >= 0) {
-    return mixColor(mid, high, ratio);
+    return mixColor(neutral, high, ratio);
   }
-  return mixColor(mid, low, Math.abs(ratio));
+  return mixColor(neutral, low, Math.abs(ratio));
 }
 
-function getSummaryBackgroundColor(mode, avgScore, renderContext) {
+function getSummaryBackgroundColor(mode, avgScore, renderContext, kind = "surface") {
+  if (state.colorMode === "absolute") return absoluteScoreColor(avgScore, kind);
   const baselineSummary = renderContext.baselineSummariesByMode?.[mode] || null;
   if (baselineSummary && Number.isFinite(avgScore) && Number.isFinite(baselineSummary.avgScore)) {
     return relativeDeltaColor(
       avgScore - baselineSummary.avgScore,
       renderContext.deltaScales.summaryByMode?.[mode] || 0,
+      kind,
     );
   }
   const percentile = getPercentile(renderContext.scoreSummaryPopulationByMode[mode], avgScore, true);
-  return percentileColor(percentile);
+  return percentileColor(percentile, kind);
 }
 
-function getRunBackgroundColor(mode, score, renderContext) {
+function getRunBackgroundColor(mode, score, renderContext, kind = "surface") {
+  if (state.colorMode === "absolute") return absoluteScoreColor(score, kind);
   const baselineSummary = renderContext.baselineSummariesByMode?.[mode] || null;
   if (baselineSummary && Number.isFinite(score) && Number.isFinite(baselineSummary.avgScore)) {
     return relativeDeltaColor(
       score - baselineSummary.avgScore,
       renderContext.deltaScales.runByMode?.[mode] || 0,
+      kind,
     );
   }
   const percentile = getPercentile(renderContext.runScorePopulationByMode[mode], score, true);
-  return percentileColor(percentile);
+  return percentileColor(percentile, kind);
 }
 
-function getMetricBackgroundColor(mode, metricKey, metricValue, renderContext) {
+function getMetricBackgroundColor(mode, metricKey, metricValue, renderContext, kind = "surface") {
+  if (state.colorMode === "absolute") {
+    const contribution = metricContribution(mode, metricKey, metricValue);
+    return absoluteScoreColor(contribution ? (contribution.points / contribution.maxPoints) * 100 : null, kind);
+  }
   const baselineSummary = renderContext.baselineSummariesByMode?.[mode] || null;
   const baselineMetric = baselineSummary?.metrics?.[metricKey] || null;
   if (baselineMetric) {
@@ -2086,6 +2093,7 @@ function getMetricBackgroundColor(mode, metricKey, metricValue, renderContext) {
       return relativeDeltaColor(
         currentContribution.points - baselineContribution.points,
         renderContext.deltaScales.metricByMode?.[mode]?.[metricKey] || 0,
+        kind,
       );
     }
   }
@@ -2096,11 +2104,11 @@ function getMetricBackgroundColor(mode, metricKey, metricValue, renderContext) {
     pointsForColor,
     true,
   );
-  return percentileColor(percentile);
+  return percentileColor(percentile, kind);
 }
 
 function parseRgbColor(color) {
-  const match = color.match(/rgb\((\d+)\s+(\d+)\s+(\d+)\)/);
+  const match = color.match(/^rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/);
   if (!match) {
     return null;
   }
@@ -2515,16 +2523,26 @@ function renderScoreCell(cell, sample, mode, renderContext, tracker, rowData) {
   }
 
   const score = sample.performanceScore;
-  const background = getRunBackgroundColor(mode, score, renderContext);
+  const color = getRunBackgroundColor(mode, score, renderContext, "bar");
   cell.className = mode === "mobile" ? "score-cell-mobile" : "score-cell-desktop";
-  cell.style.backgroundColor = background;
-  cell.style.color = textColorForBackground(background);
+  cell.style.backgroundColor = "";
+  cell.style.color = "";
   cell.innerHTML = "";
 
   const button = document.createElement("button");
   button.type = "button";
   button.className = "run-score-button";
-  button.textContent = score.toFixed(0);
+  button.dataset.runNumber = rowData.runNumber;
+  button.dataset.mode = mode;
+  const selected = state.runDetail?.url === tracker.url && state.runDetail.runNumber === rowData.runNumber && state.runDetail.mode === mode;
+  button.setAttribute("aria-pressed", String(selected));
+  const pill = document.createElement("span");
+  pill.className = "run-score-pill";
+  const number = document.createElement("span");
+  number.className = "run-score-number";
+  number.textContent = score.toFixed(0);
+  pill.append(createPaneProgress(score, color), number);
+  button.append(pill);
   button.setAttribute(
     "aria-label",
     `Open run ${rowData.runNumber} ${mode} score ${score.toFixed(0)} details`,
@@ -2554,7 +2572,17 @@ function renderScoreHistory(tbody, tracker, renderContext) {
     const row = document.createElement("tr");
     const runCell = document.createElement("td");
     runCell.className = "score-history-run";
-    runCell.textContent = rowData.pending ? `#${rowData.runNumber} next` : `#${rowData.runNumber}`;
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "run-row-close secondary";
+    close.innerHTML = iconMarkup(closeSvg);
+    close.setAttribute("aria-label", `Close run ${rowData.runNumber} details`);
+    close.title = "Close run details";
+    close.hidden = !(state.runDetail?.url === tracker.url && state.runDetail.runNumber === rowData.runNumber);
+    close.addEventListener("click", closeRunDetailPanel);
+    const runLabel = document.createElement("span");
+    runLabel.textContent = rowData.pending ? `#${rowData.runNumber} next` : `#${rowData.runNumber}`;
+    runCell.append(close, runLabel);
     row.append(runCell);
 
     const mobileCell = document.createElement("td");
@@ -2578,6 +2606,7 @@ function renderSummaryTile(tile, summary, mode, renderContext, options = {}) {
   const metaNode = tile.querySelector(".tile-meta");
   tile.style.backgroundColor = "";
   tile.style.borderColor = "";
+  tile.querySelector(".pane-progress")?.remove();
 
   if (!summary) {
     scoreNode.textContent = "--";
@@ -2641,8 +2670,7 @@ function renderSummaryTile(tile, summary, mode, renderContext, options = {}) {
   }
   metaNode.append(sub);
 
-  tile.style.backgroundColor = getSummaryBackgroundColor(mode, summary.avgScore, renderContext);
-  tile.style.borderColor = "#b8c6d9";
+  tile.querySelector(".tile-label").after(createPaneProgress(summary.avgScore, getSummaryBackgroundColor(mode, summary.avgScore, renderContext, "bar")));
 }
 
 function renderMetricSummary(tbody, mobileSummary, desktopSummary, renderContext, options = {}) {
@@ -2664,13 +2692,12 @@ function renderMetricSummary(tbody, mobileSummary, desktopSummary, renderContext
     if (!mobileMetric) {
       mobileCell.textContent = "--";
     } else {
-      const mobileCellBackground = getMetricBackgroundColor(
+      const mobileCellColor = getMetricBackgroundColor(
         "mobile",
         metric.key,
         mobileMetric.avgValue,
-        renderContext,
+        renderContext, "bar",
       );
-      mobileCell.style.backgroundColor = mobileCellBackground;
       let mobileDeltaText = "";
       if (isBaselineCard) {
         mobileDeltaText = "baseline";
@@ -2696,6 +2723,7 @@ function renderMetricSummary(tbody, mobileSummary, desktopSummary, renderContext
           mobileDeltaText,
         ),
       );
+      mobileCell.querySelector(".metric-cell").prepend(metricProgress(metric, mobileMetric.avgValue, "mobile", mobileCellColor));
     }
     row.append(mobileCell);
 
@@ -2704,13 +2732,12 @@ function renderMetricSummary(tbody, mobileSummary, desktopSummary, renderContext
     if (!desktopMetric) {
       desktopCell.textContent = "--";
     } else {
-      const desktopCellBackground = getMetricBackgroundColor(
+      const desktopCellColor = getMetricBackgroundColor(
         "desktop",
         metric.key,
         desktopMetric.avgValue,
-        renderContext,
+        renderContext, "bar",
       );
-      desktopCell.style.backgroundColor = desktopCellBackground;
       let desktopDeltaText = "";
       if (isBaselineCard) {
         desktopDeltaText = "baseline";
@@ -2736,59 +2763,11 @@ function renderMetricSummary(tbody, mobileSummary, desktopSummary, renderContext
           desktopDeltaText,
         ),
       );
+      desktopCell.querySelector(".metric-cell").prepend(metricProgress(metric, desktopMetric.avgValue, "desktop", desktopCellColor));
     }
     row.append(desktopCell);
 
     tbody.append(row);
-  }
-}
-
-function getAllRunScorePopulation() {
-  const values = [];
-  for (const tracker of state.trackers.values()) {
-    for (const mode of STRATEGIES) {
-      for (const sample of tracker.history[mode]) {
-        if (Number.isFinite(sample.performanceScore)) {
-          values.push(sample.performanceScore);
-        }
-      }
-    }
-  }
-  return values;
-}
-
-function setRunDetailModalState(isOpen) {
-  if (pageHeaderElement) {
-    pageHeaderElement.inert = isOpen;
-  }
-  if (mainContentElement) {
-    mainContentElement.inert = isOpen;
-  }
-}
-
-function trapFocusInRunDetail(event) {
-  if (!runDetailPanel) {
-    return;
-  }
-  const focusable = Array.from(
-    runDetailPanel.querySelectorAll('button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'),
-  ).filter((element) => element instanceof HTMLElement && element.offsetParent !== null);
-  if (!focusable.length) {
-    event.preventDefault();
-    runDetailPanel.focus();
-    return;
-  }
-  const first = focusable[0];
-  const last = focusable[focusable.length - 1];
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first.focus();
-  } else if (!runDetailPanel.contains(document.activeElement)) {
-    event.preventDefault();
-    first.focus();
   }
 }
 
@@ -2797,6 +2776,10 @@ function closeRunDetailPanel() {
   runDetailReturnFocusElement = null;
   state.runDetail = null;
   renderRunDetailPanel();
+  document.querySelector("main").scrollTo({ left: 0, behavior: "instant" });
+  document.querySelectorAll('.run-score-button[aria-pressed="true"]').forEach((button) => button.setAttribute("aria-pressed", "false"));
+  syncRunRowCloseButtons();
+  positionRunSelection();
   requestAnimationFrame(() => {
     if (returnFocus instanceof HTMLElement && returnFocus.isConnected) {
       returnFocus.focus({ preventScroll: true });
@@ -2805,6 +2788,8 @@ function closeRunDetailPanel() {
 }
 
 function openRunDetailPanel(tracker, mode, sample, runNumber, returnFocus = null) {
+  const wasOpen = Boolean(state.runDetail);
+  const main = document.querySelector("main");
   runDetailReturnFocusElement = returnFocus instanceof HTMLElement
     ? returnFocus
     : (document.activeElement instanceof HTMLElement ? document.activeElement : null);
@@ -2816,31 +2801,62 @@ function openRunDetailPanel(tracker, mode, sample, runNumber, returnFocus = null
     runNumber,
   };
   renderRunDetailPanel();
+  if (!wasOpen && window.matchMedia("(min-width: 901px)").matches) {
+    const openedDetail = state.runDetail;
+    let settled = false;
+    const revealRunPane = () => {
+      if (settled) return;
+      settled = true;
+      main.removeEventListener("transitionend", onTransitionEnd);
+      if (state.runDetail !== openedDetail) return;
+      const slot = document.getElementById("run-detail-slot");
+      const target = Math.max(0, slot.offsetLeft + slot.offsetWidth - main.clientWidth);
+      if (target > main.scrollLeft) main.scrollTo({ left: target, behavior: document.body.classList.contains("keyboard-input") || window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+    };
+    const onTransitionEnd = (event) => {
+      if (event.target === main && event.propertyName === "grid-template-columns") revealRunPane();
+    };
+    main.addEventListener("transitionend", onTransitionEnd);
+    setTimeout(revealRunPane, 320);
+  }
+  document.querySelectorAll('.run-score-button[aria-pressed="true"]').forEach((button) => button.setAttribute("aria-pressed", "false"));
+  returnFocus?.setAttribute("aria-pressed", "true");
+  syncRunRowCloseButtons();
+  positionRunSelection();
   requestAnimationFrame(() => {
-    runDetailCloseButton?.focus({ preventScroll: true });
+    if (!wasOpen) {
+      runDetailCloseButton?.focus({ preventScroll: true });
+      if (window.matchMedia("(max-width: 900px)").matches) {
+        runDetailPanel?.scrollIntoView({ block: "nearest", behavior: "instant" });
+      }
+    }
   });
 }
 
-function renderRunDetailPanel() {
-  if (!runDetailPanel || !runDetailBackdrop || !runDetailContent) {
+function syncRunRowCloseButtons() {
+  document.querySelectorAll(".score-history-body tr").forEach((row) => {
+    const close = row.querySelector(".run-row-close");
+    if (close) close.hidden = !row.querySelector('.run-score-button[aria-pressed="true"]');
+  });
+}
+
+function renderRunDetailPanel(renderContext = null) {
+  if (!runDetailPanel || !runDetailContent) {
     return;
   }
 
   if (!state.runDetail) {
     document.body.classList.remove("run-detail-open");
-    setRunDetailModalState(false);
+    document.querySelector(".site-library").inert = document.body.classList.contains("comparison-active");
     runDetailPanel.setAttribute("aria-hidden", "true");
-    runDetailContent.innerHTML = "";
-    const placeholder = document.createElement("p");
-    placeholder.className = "placeholder";
-    placeholder.textContent = "Click any score in Score Runs to inspect that single run.";
-    runDetailContent.append(placeholder);
+    runDetailPanel.inert = true;
     return;
   }
 
   document.body.classList.add("run-detail-open");
-  setRunDetailModalState(true);
+  document.querySelector(".site-library").inert = false;
   runDetailPanel.setAttribute("aria-hidden", "false");
+  runDetailPanel.inert = false;
   runDetailContent.innerHTML = "";
 
   const detail = state.runDetail;
@@ -2855,10 +2871,9 @@ function renderRunDetailPanel() {
   urlLine.textContent = detail.url;
   runDetailContent.append(urlLine);
 
-  const scorePopulation = getAllRunScorePopulation();
   const runScore = detail.sample.performanceScore;
-  const runPercentile = getPercentile(scorePopulation, runScore, true);
-  const runScoreBackground = percentileColor(runPercentile);
+  const colorContext = renderContext || buildRenderContext();
+  const runScoreColor = getRunBackgroundColor(detail.mode, runScore, colorContext, "bar");
 
   const metaGrid = document.createElement("dl");
   metaGrid.className = "run-detail-meta-grid";
@@ -2875,11 +2890,10 @@ function renderRunDetailPanel() {
     const dd = document.createElement("dd");
     dd.textContent = value;
     if (label === "Performance") {
-      dd.style.backgroundColor = runScoreBackground;
-      dd.style.color = textColorForBackground(runScoreBackground);
       dd.className = "run-detail-score";
     }
     item.append(dt, dd);
+    if (label === "Performance") item.append(createPaneProgress(runScore, runScoreColor));
     metaGrid.append(item);
   }
   runDetailContent.append(metaGrid);
@@ -2908,8 +2922,7 @@ function renderRunDetailPanel() {
     if (metricData && Number.isFinite(metricData.score)) {
       const scoreValue = Math.max(0, Math.min(100, metricData.score));
       scoreCell.textContent = scoreValue.toFixed(0);
-      scoreCell.style.backgroundColor = percentileColor(scoreValue);
-      scoreCell.style.color = textColorForBackground(scoreCell.style.backgroundColor);
+      scoreCell.prepend(createPaneProgress(scoreValue, getMetricBackgroundColor(detail.mode, metric.key, metricData.value, colorContext, "bar")));
     } else {
       scoreCell.textContent = "--";
     }
@@ -2922,8 +2935,7 @@ function renderRunDetailPanel() {
       if (contribution) {
         pointsCell.textContent = `${formatPointValue(contribution.points)} / ${formatPointValue(contribution.maxPoints)}`;
         const percent = (contribution.points / contribution.maxPoints) * 100;
-        pointsCell.style.backgroundColor = percentileColor(percent);
-        pointsCell.style.color = textColorForBackground(pointsCell.style.backgroundColor);
+        pointsCell.prepend(createPaneProgress(percent, getMetricBackgroundColor(detail.mode, metric.key, metricData.value, colorContext, "bar")));
         pointsCell.dataset.tooltip = `${SCORING_MODEL_VERSION} weighted contribution to the 100-point performance score.`;
         pointsCell.title = pointsCell.dataset.tooltip;
         attachTooltipHandlers(pointsCell);
@@ -2940,7 +2952,10 @@ function renderRunDetailPanel() {
   }
 
   metricTable.append(body);
-  runDetailContent.append(metricTable);
+  const metricWrap = document.createElement("div");
+  metricWrap.className = "run-detail-table-wrap";
+  metricWrap.append(metricTable);
+  runDetailContent.append(metricWrap);
 }
 
 function syncUrlCardHeaderHeights() {
@@ -3014,17 +3029,21 @@ function render() {
     if (toggleDetailsButton) {
       toggleDetailsButton.hidden = !hasTrackers;
     }
-    clearAllButton.hidden = !hasTrackers;
-    updateClearAllButtonState();
+    clearRunsButton.hidden = !hasTrackers;
+    deleteAllSitesButton.hidden = !hasTrackers;
+    const relativeColors = state.colorMode === "relative";
+    colorModeButton.textContent = `Colors: ${relativeColors ? "Relative" : "Absolute"}`;
+    colorModeButton.setAttribute("aria-label", `Color mode: ${relativeColors ? "relative" : "absolute"}. Switch to ${relativeColors ? "absolute" : "relative"} colors`);
     updateApiKeyUi();
     if (toggleDetailsButton) {
       toggleDetailsButton.textContent = state.showDetails ? "Hide Details" : "Show Details";
       toggleDetailsButton.setAttribute("aria-label", state.showDetails ? "Hide Details" : "Show Details");
     }
     const renderContext = buildRenderContext();
+    renderSiteLibrary(renderContext);
     renderCards(renderContext);
     renderComparisonTable(renderContext);
-    renderRunDetailPanel();
+    renderRunDetailPanel(renderContext);
     if (labelEditState) {
       restoreLabelEditState(labelEditState);
     }
@@ -3036,15 +3055,385 @@ function render() {
   }
 }
 
+function setWorkspaceView(view) {
+  if (view !== "sites" && state.runDetail) closeRunDetailPanel();
+  document.getElementById("sites-view").hidden = view !== "sites";
+  document.getElementById("comparison-view").hidden = view !== "comparison";
+  document.body.classList.toggle("comparison-active", view === "comparison");
+  const library = document.querySelector(".site-library");
+  const addPanel = document.querySelector(".library-add");
+  const comparisonAddSlot = document.getElementById("comparison-add-slot");
+  (view === "comparison" ? comparisonAddSlot : library).append(addPanel);
+  comparisonAddSlot.hidden = view !== "comparison";
+  library.inert = view !== "sites";
+  library.setAttribute("aria-hidden", view === "sites" ? "false" : "true");
+  document.querySelectorAll(".workspace-tab[data-view]").forEach((button) => {
+    const active = button.dataset.view === view;
+    button.classList.toggle("selected", active);
+    if (active) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
+  });
+  if (view === "sites") requestAnimationFrame(positionSiteSelection);
+}
+
+let workspaceTransition = null;
+function switchWorkspaceView(view) {
+  const currentView = document.body.classList.contains("comparison-active") ? "comparison" : "sites";
+  if (view === currentView) return;
+  if (typeof document.startViewTransition !== "function" || window.matchMedia("(prefers-reduced-motion: reduce)").matches || document.body.classList.contains("keyboard-input")) {
+    setWorkspaceView(view);
+    return;
+  }
+  document.body.classList.add("moving-add-panel");
+  const transition = document.startViewTransition(() => setWorkspaceView(view));
+  workspaceTransition = transition;
+  transition.finished.finally(() => {
+    if (workspaceTransition === transition) {
+      workspaceTransition = null;
+      document.body.classList.remove("moving-add-panel");
+    }
+  }).catch(() => {});
+}
+
+document.querySelectorAll(".workspace-tab[data-view]").forEach((button) => {
+  button.addEventListener("click", () => switchWorkspaceView(button.dataset.view));
+});
+document.getElementById("site-search").addEventListener("input", () => renderSiteLibrary(buildRenderContext()));
+window.addEventListener("resize", positionSiteSelection);
+window.addEventListener("resize", () => {
+  positionRunSelection();
+});
+
+function positionRunSelection() {
+  const scroller = document.querySelector(".score-history-scroll");
+  const selection = scroller?.querySelector(".run-selection");
+  const shadow = scroller?.querySelector(".run-selection-shadow");
+  const row = scroller?.querySelector('.run-score-button[aria-pressed="true"]')?.closest("tr");
+  if (!selection) return;
+  if (!row || !state.runDetail) { selection.hidden = true; if (shadow) shadow.hidden = true; return; }
+  const rowBounds = row.getBoundingClientRect();
+  const scrollBounds = scroller.getBoundingClientRect();
+  selection.style.height = `${rowBounds.height}px`;
+  selection.style.transform = `translateY(${rowBounds.top - scrollBounds.top + scroller.scrollTop}px)`;
+  selection.hidden = false;
+  if (shadow) {
+    shadow.style.height = selection.style.height;
+    shadow.style.transform = selection.style.transform;
+    shadow.hidden = false;
+  }
+  syncRunSeam(selection);
+}
+
+function syncRunSeam(selection) {
+  if (selection.hidden || !selection.isConnected) return;
+  const slot = document.getElementById("score-history-slot");
+  const rowBounds = selection.getBoundingClientRect();
+  const slotBounds = slot.getBoundingClientRect();
+  const detailSlot = document.getElementById("run-detail-slot");
+  const detailBounds = detailSlot.getBoundingClientRect();
+  detailSlot.style.setProperty("--run-seam-top", `${rowBounds.top - detailBounds.top}px`);
+  detailSlot.style.setProperty("--run-seam-height", `${rowBounds.height}px`);
+  updateConnectedEdgeShadow(slot, rowBounds.top - slotBounds.top, rowBounds.bottom - slotBounds.top, rowBounds.left - slotBounds.left);
+}
+
+function followRunSeam(selection) {
+  syncRunSeam(selection);
+  if (selection.isConnected && selection.getAnimations().some((animation) => animation.playState === "running")) {
+    requestAnimationFrame(() => followRunSeam(selection));
+  }
+}
+
+const libraryAdd = document.querySelector(".library-add");
+const library = document.querySelector(".site-library");
+createConnectedEdgeShadow(library, "site-edge");
+new ResizeObserver(() => {
+  library.style.setProperty("--add-panel-height", `${libraryAdd.offsetHeight}px`);
+  document.querySelector("main").style.setProperty("--add-panel-height", `${libraryAdd.offsetHeight}px`);
+}).observe(libraryAdd);
+new ResizeObserver(positionSiteSelection).observe(library);
+document.getElementById("site-list").addEventListener("scroll", syncSiteSeam, { passive: true });
+document.getElementById("site-selection").addEventListener("transitionrun", (event) => {
+  if (event.propertyName === "transform") followSiteSeam(event.currentTarget);
+});
+
+function syncSiteSeam() {
+  const selection = document.getElementById("site-selection");
+  if (selection.hidden) return;
+  const bounds = selection.getBoundingClientRect();
+  const libraryBounds = library.getBoundingClientRect();
+  updateConnectedEdgeShadow(library, bounds.top - libraryBounds.top, bounds.bottom - libraryBounds.top);
+}
+
+function createConnectedEdgeShadow(container, id) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.classList.add("connected-edge-shadow");
+  svg.setAttribute("aria-hidden", "true");
+  svg.innerHTML = `<defs><filter id="${id}-filter" filterUnits="userSpaceOnUse" x="-160" y="-40" width="400"><feGaussianBlur in="SourceAlpha" stdDeviation="2.5" result="blur1"/><feOffset in="blur1" dy="2" result="offset1"/><feFlood flood-color="#101828" flood-opacity=".06" result="color1"/><feComposite in="color1" in2="offset1" operator="in" result="shadow1"/><feGaussianBlur in="SourceAlpha" stdDeviation="1" result="blur2"/><feOffset in="blur2" dy="1" result="offset2"/><feFlood flood-color="#101828" flood-opacity=".04" result="color2"/><feComposite in="color2" in2="offset2" operator="in" result="shadow2"/><feMerge><feMergeNode in="shadow1"/><feMergeNode in="shadow2"/></feMerge></filter><mask id="${id}-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="32"><rect x="0" y="0" width="32" fill="white"/><path fill="black"/></mask></defs><path fill="white" filter="url(#${id}-filter)" mask="url(#${id}-mask)"/>`;
+  if (id === "run-edge") {
+    const outline = svg.lastElementChild;
+    outline.removeAttribute("filter");
+    outline.removeAttribute("mask");
+    outline.setAttribute("fill", "none");
+    outline.setAttribute("stroke", "var(--run-outline)");
+    outline.setAttribute("stroke-width", "4");
+  }
+  container.append(svg);
+}
+
+function updateConnectedEdgeShadow(container, top, bottom, tabLeft = null) {
+  const svg = container.querySelector(".connected-edge-shadow");
+  if (!svg) return;
+  const height = container.clientHeight;
+  if (!height) return;
+  const runOutline = tabLeft !== null;
+  const width = runOutline ? container.clientWidth + 8 : 32;
+  const seamX = runOutline ? width - 6 : width;
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.querySelector("filter").setAttribute("height", height + 80);
+  svg.querySelector("mask").setAttribute("height", height);
+  svg.querySelector("mask").setAttribute("width", width);
+  svg.querySelector("mask rect").setAttribute("height", height);
+  svg.querySelector("mask rect").setAttribute("width", width);
+  const hasTab = bottom > 18 && top < height && top >= 18;
+  const edge = hasTab && runOutline
+    ? `V ${bottom + 18} Q ${width} ${bottom} ${width - 18} ${bottom} H ${tabLeft + 16} Q ${tabLeft} ${bottom} ${tabLeft} ${bottom - 16} V ${top + 16} Q ${tabLeft} ${top} ${tabLeft + 16} ${top} H ${width - 18} Q ${width} ${top} ${width} ${top - 18}`
+    : hasTab
+      ? `V ${bottom + 18} Q 32 ${bottom} 14 ${bottom} H -120 V ${top} H 14 Q 32 ${top} 32 ${top - 18}`
+      : "";
+  const bottomEdge = runOutline ? `V ${height} H ${width + 18} Q ${width} ${height} ${width} ${height - 18}` : `V ${height + 20} H ${width}`;
+  const path = `M ${width + 18} 0 H ${width + 168} ${bottomEdge} ${edge} V 18 Q ${width} 0 ${width + 18} 0 Z`;
+  svg.querySelector("mask path").setAttribute("d", path);
+  const tabOutline = hasTab && runOutline
+    ? `M ${seamX} ${top - 22} V ${top - 18} Q ${seamX} ${top} ${seamX - 18} ${top} H ${tabLeft + 16} Q ${tabLeft} ${top} ${tabLeft} ${top + 16} V ${bottom - 16} Q ${tabLeft} ${bottom} ${tabLeft + 16} ${bottom} H ${seamX - 18} Q ${seamX} ${bottom} ${seamX} ${bottom + 18} V ${bottom + 22}`
+    : "";
+  svg.lastElementChild.setAttribute("d", runOutline ? tabOutline : path);
+}
+
+function followSiteSeam(selection) {
+  syncSiteSeam();
+  if (!selection.hidden && selection.getAnimations().some((animation) => animation.playState === "running")) {
+    requestAnimationFrame(() => followSiteSeam(selection));
+  }
+}
+
+function positionSiteSelection() {
+  const list = document.getElementById("site-list");
+  const selection = document.getElementById("site-selection");
+  const selected = list.querySelector(".site-row.is-selected");
+  if (!selected || !list.getClientRects().length) {
+    selection.hidden = true;
+    return;
+  }
+  const listBounds = list.getBoundingClientRect();
+  const rowBounds = selected.getBoundingClientRect();
+  selection.style.height = `${rowBounds.height}px`;
+  selection.style.transform = `translateY(${rowBounds.top - listBounds.top + list.scrollTop}px)`;
+  selection.hidden = false;
+  syncSiteSeam();
+}
+
+function renderSiteLibrary(renderContext) {
+  const list = document.getElementById("site-list");
+  const rows = document.getElementById("site-list-rows");
+  const query = document.getElementById("site-search").value.trim().toLowerCase();
+  if (!state.trackers.has(selectedSiteUrl)) selectedSiteUrl = getOrderedTrackerUrls()[0] || null;
+  document.getElementById("site-count").textContent = `${state.trackers.size} ${state.trackers.size === 1 ? "site" : "sites"} · ${Array.from(state.trackers.values()).filter((tracker) => tracker.running).length} running`;
+  rows.replaceChildren();
+  const matches = getOrderedTrackers().filter((tracker) => `${tracker.label} ${tracker.url}`.toLowerCase().includes(query));
+  for (const tracker of matches) {
+    const row = document.createElement("div");
+    row.className = "site-row";
+    row.dataset.url = tracker.url;
+    row.classList.toggle("is-selected", tracker.url === selectedSiteUrl);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "site-item";
+    button.draggable = true;
+    button.title = "Drag to reorder";
+    if (tracker.url === selectedSiteUrl) button.setAttribute("aria-current", "page");
+    const copy = document.createElement("span");
+    copy.className = "site-item-copy";
+    const name = document.createElement("strong");
+    name.textContent = tracker.label || (parseUrlSafe(tracker.url)?.hostname ?? tracker.url);
+    const status = document.createElement("small");
+    const summaries = renderContext.summariesByUrl.get(tracker.url) || {};
+    const mobile = summaries.mobile?.avgScore;
+    const desktop = summaries.desktop?.avgScore;
+    status.textContent = `● ${describeTrackerStatus(tracker)}${state.comparisonBaseUrl === tracker.url ? " · Baseline" : ""}`;
+    status.className = `site-status${tracker.running ? " is-running" : ""}`;
+    copy.append(name, status);
+    const scores = document.createElement("span");
+    scores.className = "site-item-scores";
+    for (const [mode, score] of [["Mobile", mobile], ["Desktop", desktop]]) {
+      const summary = summaries[mode.toLowerCase()];
+      const value = document.createElement("span");
+      const bar = document.createElement("span");
+      bar.className = "site-score-track";
+      const fill = document.createElement("span");
+      fill.className = "site-score-fill";
+      if (Number.isFinite(score)) {
+        fill.style.width = `${Math.max(0, Math.min(100, score))}%`;
+        fill.style.backgroundColor = getSummaryBackgroundColor(mode.toLowerCase(), score, renderContext, "bar");
+      }
+      bar.append(fill);
+      const scoreLine = document.createElement("span");
+      scoreLine.className = "site-score-line";
+      const number = document.createElement("strong");
+      number.textContent = Number.isFinite(score) ? score.toFixed(1) : "–";
+      const confidence = document.createElement("small");
+      confidence.textContent = summary && summary.ci95HalfWidth !== null ? `±${summary.ci95HalfWidth.toFixed(1)}` : "";
+      scoreLine.append(number, confidence);
+      const info = document.createElement("small");
+      info.textContent = summary ? `${summary.samples} ${summary.samples === 1 ? "run" : "runs"}` : "No runs";
+      value.append(bar, scoreLine, info);
+      if (summary) {
+        const estimate = document.createElement("small");
+        const required = summary.samples < 2 ? null : Math.max(MIN_STAT_SIG_SAMPLES, Math.ceil(((1.96 * summary.scoreStdDev) / TARGET_CI_HALF_WIDTH_POINTS) ** 2));
+        const tight = summary.samples < 2 ? null : Math.max(MIN_STAT_SIG_SAMPLES, Math.ceil(((1.96 * summary.scoreStdDev) / SECONDARY_CI_HALF_WIDTH_POINTS) ** 2));
+        estimate.textContent = required === null ? "±2 in ? runs" : summary.samples < required ? `±2 in ${required - summary.samples} runs` : summary.samples < tight ? `±1 in ${tight - summary.samples} runs` : "±1 reached";
+        value.append(estimate);
+      }
+      value.setAttribute("aria-label", `${mode} average ${Number.isFinite(score) ? score.toFixed(1) : "not available"}; ${Array.from(value.querySelectorAll("small"), (item) => item.textContent).join("; ")}`);
+      scores.append(value);
+    }
+    button.append(copy, scores);
+    button.addEventListener("click", () => {
+      if (state.runDetail && state.runDetail.url !== tracker.url) closeRunDetailPanel();
+      selectedSiteUrl = tracker.url;
+      openSiteMenuUrl = null;
+      setWorkspaceView("sites");
+      render();
+      document.querySelector('.site-item[aria-current="page"]')?.focus({ preventScroll: true });
+    });
+    button.addEventListener("dragstart", (event) => {
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", tracker.url);
+    });
+    button.addEventListener("dragover", (event) => event.preventDefault());
+    button.addEventListener("drop", (event) => {
+      event.preventDefault();
+      const from = event.dataTransfer.getData("text/plain");
+      if (state.trackers.has(from) && from !== tracker.url) reorderTracker(from, tracker.url);
+    });
+    const actions = document.createElement("div");
+    actions.className = "site-row-actions";
+    const menu = document.createElement("details");
+    menu.className = "site-menu";
+    menu.open = openSiteMenuUrl === tracker.url;
+    const menuTrigger = document.createElement("summary");
+    menuTrigger.innerHTML = iconMarkup(ellipsisSvg);
+    menuTrigger.setAttribute("aria-label", `More actions: ${tracker.label || tracker.url}`);
+    menu.append(menuTrigger);
+    const menuItems = document.createElement("div");
+    menuItems.className = "site-menu-items";
+    menu.append(menuItems);
+    menu.addEventListener("toggle", () => {
+      if (!menu.isConnected) return;
+      if (menu.open) {
+        document.querySelectorAll(".site-menu[open]").forEach((other) => {
+          if (other !== menu) other.open = false;
+        });
+        openSiteMenuUrl = tracker.url;
+      }
+      else if (openSiteMenuUrl === tracker.url) openSiteMenuUrl = null;
+    });
+    const addAction = (label, handler, options = {}) => {
+      const action = document.createElement("button");
+      action.type = "button";
+      action.className = `site-action${options.className ? ` ${options.className}` : ""}`;
+      if (options.icon) action.innerHTML = options.icon;
+      else action.textContent = label;
+      action.setAttribute("aria-label", `${label}: ${tracker.label || tracker.url}`);
+      if (typeof options.pressed === "boolean") action.setAttribute("aria-pressed", String(options.pressed));
+      action.title = label;
+      action.disabled = Boolean(options.disabled);
+      action.addEventListener("click", handler);
+      (options.leading ? row : options.menu ? menuItems : actions).append(action);
+    };
+    const playIcon = iconMarkup(playSvg);
+    const pauseIcon = iconMarkup(pauseSvg);
+    addAction(tracker.running ? "Pause" : "Resume", () => {
+      if (tracker.running) stopTracker(tracker);
+      else if (ensureApiKeyConfigured()) startTracker(tracker, true);
+      render();
+    }, { icon: tracker.running ? pauseIcon : playIcon, className: "site-run-toggle", leading: true });
+    addAction(state.comparisonBaseUrl === tracker.url ? "Clear baseline" : "Set baseline", () => {
+      state.comparisonBaseUrl = state.comparisonBaseUrl === tracker.url ? null : tracker.url;
+      openSiteMenuUrl = null;
+      persistState();
+      render();
+    }, { icon: ICON_BASELINE, className: state.comparisonBaseUrl === tracker.url ? "is-baseline" : "", pressed: state.comparisonBaseUrl === tracker.url });
+    addAction("Edit label", () => {
+      if (state.runDetail && state.runDetail.url !== tracker.url) closeRunDetailPanel();
+      selectedSiteUrl = tracker.url;
+      openSiteMenuUrl = null;
+      setWorkspaceView("sites");
+      render();
+      beginLabelEditing(tracker.url);
+    }, { menu: true });
+    addAction("Remove", () => {
+      menu.open = false;
+      openSiteMenuUrl = null;
+      openRemoveSiteDialog(tracker);
+    }, { menu: true, className: "remove" });
+    actions.append(menu);
+    row.append(button, actions);
+    if (tracker.lastError) {
+      const error = document.createElement("p");
+      error.className = "site-row-error";
+      error.textContent = tracker.lastError;
+      row.append(error);
+    }
+    rows.append(row);
+  }
+  if (!matches.length) {
+    const empty = document.createElement("p");
+    empty.className = "library-empty";
+    empty.textContent = query ? "No sites found." : "Your tracked sites will appear here.";
+    rows.append(empty);
+  }
+  positionSiteSelection();
+}
+
+function loadDemoSites() {
+  const examples = [
+    { url: "https://northstar.example/", label: "Demo · Northstar Home", mobile: 78, desktop: 94 },
+    { url: "https://northstar.example/products/field-kit", label: "Demo · Field Kit", mobile: 68, desktop: 89 },
+    { url: "https://northstar.example/collections/all", label: "Demo · Collection", mobile: 84, desktop: 96 },
+    { url: "https://northstar.example/pages/about", label: "Demo · About", mobile: 91, desktop: 98 },
+  ];
+  for (const [siteIndex, example] of examples.entries()) {
+    if (state.trackers.has(example.url)) continue;
+    const tracker = createTracker(example.url);
+    tracker.label = example.label;
+    for (const mode of STRATEGIES) {
+      const base = example[mode];
+      tracker.history[mode] = Array.from({ length: 12 }, (_, index) => {
+        const variation = [1, -3, 2, 0, -1, 3, -2, 1, 0, -1, 2, -2][index];
+        const multiplier = (mode === "mobile" ? 1 : 0.58) * (1 + siteIndex * 0.06) * (1 + variation * 0.018);
+        const values = { fcp: 1850, si: 2750, lcp: 3100, tbt: 230, cls: 0.075 };
+        const metrics = Object.fromEntries(METRICS.map((metric) => [metric.key, {
+          value: values[metric.key] * multiplier,
+          score: Math.max(0, Math.min(100, base + variation)),
+        }]));
+        return { timestamp: Date.now() - (11 - index) * 60000, lighthouseFetchTime: null, performanceScore: Math.max(0, Math.min(100, base + variation)), metrics };
+      });
+    }
+    state.trackers.set(tracker.url, tracker);
+    state.trackerOrder.push(tracker.url);
+  }
+  selectedSiteUrl = examples[0].url;
+  persistState();
+  render();
+}
+
 function renderCards(renderContext) {
   const scrollByUrl = new Map();
-  for (const existingCard of urlCardsContainer.querySelectorAll(".url-card[data-url]")) {
-    const url = existingCard.dataset.url;
-    const scroller = existingCard.querySelector(".score-history-scroll");
-    if (url && scroller) {
-      scrollByUrl.set(url, scroller.scrollTop);
-    }
-  }
+  const historySlot = document.getElementById("score-history-slot");
+  const existingScroller = historySlot.querySelector(".score-history-scroll");
+  if (existingScroller && historySlot.dataset.url) scrollByUrl.set(historySlot.dataset.url, existingScroller.scrollTop);
+  historySlot.replaceChildren();
+  historySlot.dataset.url = "";
 
   urlCardsContainer.innerHTML = "";
 
@@ -3052,11 +3441,11 @@ function renderCards(renderContext) {
     const empty = document.createElement("div");
     empty.className = "empty-state";
     const title = document.createElement("h3");
-    title.textContent = "No tracked URLs yet";
+    title.textContent = "No sites yet";
     const copy = document.createElement("p");
     copy.textContent = hasApiKey()
-      ? "Add a URL above to start collecting mobile and desktop samples."
-      : "Save your API key, then add a URL to begin collecting samples.";
+      ? "Add a URL below to start collecting mobile and desktop results."
+      : "Add your API key, then enter a URL below to start tracking performance.";
     const button = document.createElement("button");
     button.type = "button";
     button.className = hasApiKey() ? "secondary" : "";
@@ -3069,6 +3458,14 @@ function renderCards(renderContext) {
       openApiKeyDialog();
     });
     empty.append(title, copy, button);
+    if (import.meta.env.DEV) {
+      const demoButton = document.createElement("button");
+      demoButton.type = "button";
+      demoButton.className = "secondary demo-button";
+      demoButton.textContent = "Load demo sites";
+      demoButton.addEventListener("click", loadDemoSites);
+      empty.append(demoButton);
+    }
     urlCardsContainer.append(empty);
     return;
   }
@@ -3077,6 +3474,7 @@ function renderCards(renderContext) {
   const baseSummaries = baseUrl ? (renderContext.summariesByUrl.get(baseUrl) || null) : null;
 
   for (const tracker of getOrderedTrackers()) {
+    if (tracker.url !== selectedSiteUrl) continue;
     const card = urlCardTemplate.content.firstElementChild.cloneNode(true);
     const isBaseCard = state.comparisonBaseUrl === tracker.url;
     card.dataset.url = tracker.url;
@@ -3103,7 +3501,7 @@ function renderCards(renderContext) {
     const errorText = card.querySelector(".error-text");
 
     const hasLabel = Boolean(tracker.label && tracker.label.trim());
-    labelLine.textContent = hasLabel ? tracker.label : "Add a label";
+    labelLine.textContent = hasLabel ? tracker.label : (parseUrlSafe(tracker.url)?.hostname ?? tracker.url);
     if (isBaseCard) {
       const baselineBadge = document.createElement("span");
       baselineBadge.className = "baseline-badge";
@@ -3112,6 +3510,7 @@ function renderCards(renderContext) {
     }
     urlLine.textContent = tracker.url;
     title.classList.toggle("no-label", !hasLabel);
+    title.setAttribute("aria-label", `Edit label for ${tracker.label || tracker.url}`);
     title.dataset.tooltip = hasLabel ? "Edit label" : "Add label";
     attachTooltipHandlers(title);
 
@@ -3234,28 +3633,28 @@ function renderCards(renderContext) {
 
     meta.textContent = `Status: ${describeTrackerStatus(tracker)}`;
 
-    const iconPlay = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
-    const iconPause = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zm6 0h4v14h-4z"/></svg>';
-    const iconRunNow = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>';
-    const iconTrash = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v9h-2V9zm4 0h2v9h-2V9zM7 9h2v9H7V9z"/></svg>';
+    const iconPlay = iconMarkup(playSvg);
+    const iconPause = iconMarkup(pauseSvg);
+    const iconRunNow = iconMarkup(zapSvg);
+    const iconTrash = iconMarkup(trashSvg);
 
     toggleButton.classList.toggle("is-running", tracker.running);
     toggleButton.classList.toggle("is-paused", !tracker.running);
-    toggleButton.innerHTML = tracker.running ? iconPause : iconPlay;
+    toggleButton.innerHTML = `${tracker.running ? iconPause : iconPlay}<span>${tracker.running ? "Pause" : "Resume"}</span>`;
     toggleButton.setAttribute("aria-label", tracker.running ? "Pause" : "Resume");
     toggleButton.dataset.tooltip = tracker.running ? "Pause" : "Resume";
     attachTooltipHandlers(toggleButton);
     toggleButton.addEventListener("click", () => {
       if (tracker.running) {
         stopTracker(tracker);
-      } else {
+      } else if (ensureApiKeyConfigured()) {
         startTracker(tracker, true);
       }
       render();
     });
 
     runNowButton.disabled = tracker.inFlight;
-    runNowButton.innerHTML = iconRunNow;
+    runNowButton.innerHTML = `${iconRunNow}<span>${tracker.running ? "Run now" : "Run once"}</span>`;
     runNowButton.setAttribute("aria-label", tracker.running ? "Run now" : "Run once");
     runNowButton.dataset.tooltip = tracker.running ? "Run now" : "Run once";
     attachTooltipHandlers(runNowButton);
@@ -3267,7 +3666,7 @@ function renderCards(renderContext) {
     });
 
     if (setBaselineButton) {
-      setBaselineButton.innerHTML = ICON_BASELINE;
+      setBaselineButton.innerHTML = `${ICON_BASELINE}<span>${isBaseCard ? "Clear baseline" : "Set baseline"}</span>`;
       setBaselineButton.classList.toggle("is-active", isBaseCard);
       setBaselineButton.setAttribute("aria-label", isBaseCard ? "Clear comparison baseline" : "Set as comparison baseline");
       setBaselineButton.dataset.tooltip = isBaseCard ? "Clear comparison baseline" : "Set as comparison baseline";
@@ -3282,24 +3681,11 @@ function renderCards(renderContext) {
     }
 
     removeButton.innerHTML = iconTrash;
-    removeButton.setAttribute("aria-label", "Remove");
-    const removeLocked = tracker.removeConfirmArmed && Date.now() < tracker.removeConfirmReadyAt;
-    removeButton.classList.toggle("remove-confirm", tracker.removeConfirmArmed);
-    removeButton.disabled = removeLocked;
-    removeButton.dataset.tooltip = tracker.removeConfirmArmed ? "Really remove?" : "Remove";
-    removeButton.setAttribute("aria-label", tracker.removeConfirmArmed ? "Really remove?" : "Remove");
+    removeButton.dataset.tooltip = "Remove site";
+    removeButton.setAttribute("aria-label", `Remove site: ${tracker.label || tracker.url}`);
     attachTooltipHandlers(removeButton);
     removeButton.addEventListener("click", () => {
-      if (!tracker.removeConfirmArmed) {
-        hideTooltip();
-        armTrackerRemoval(tracker);
-        render();
-        return;
-      }
-      if (Date.now() < tracker.removeConfirmReadyAt) {
-        return;
-      }
-      removeTracker(tracker.url);
+      openRemoveSiteDialog(tracker);
     });
 
     card.addEventListener("dragover", (event) => {
@@ -3375,9 +3761,19 @@ function renderCards(renderContext) {
     errorText.textContent = tracker.lastError;
 
     urlCardsContainer.append(card);
+    if (scoreHistorySection && !scoreHistorySection.hidden) {
+      historySlot.dataset.url = tracker.url;
+      historySlot.append(scoreHistorySection);
+      createConnectedEdgeShadow(historySlot, "run-edge");
+      scoreHistoryScroll?.addEventListener("scroll", positionRunSelection, { passive: true });
+      scoreHistoryScroll?.querySelector(".run-selection")?.addEventListener("transitionrun", (event) => {
+        if (event.propertyName === "transform") followRunSeam(event.currentTarget);
+      });
+    }
     if (scoreHistoryScroll && scrollByUrl.has(tracker.url)) {
       scoreHistoryScroll.scrollTop = scrollByUrl.get(tracker.url);
     }
+    requestAnimationFrame(positionRunSelection);
   }
 }
 
@@ -3504,8 +3900,8 @@ function renderComparisonTable(renderContext) {
 
     const scoreAvgCell = document.createElement("td");
     scoreAvgCell.className = "comparison-color-cell comparison-score-cell";
-    scoreAvgCell.style.backgroundColor = getSummaryBackgroundColor(rowData.mode, rowData.summary.avgScore, renderContext);
     scoreAvgCell.textContent = rowData.summary.avgScore.toFixed(1);
+    scoreAvgCell.prepend(createPaneProgress(rowData.summary.avgScore, getSummaryBackgroundColor(rowData.mode, rowData.summary.avgScore, renderContext, "bar")));
     row.append(scoreAvgCell);
 
     const confidenceCell = document.createElement("td");
@@ -3520,11 +3916,11 @@ function renderComparisonTable(renderContext) {
       const metricCell = document.createElement("td");
       metricCell.className = "comparison-color-cell";
       const metricResult = rowData.summary.metrics[metric.key];
-      metricCell.style.backgroundColor = getMetricBackgroundColor(
+      const metricColor = getMetricBackgroundColor(
         rowData.mode,
         metric.key,
         metricResult.avgValue,
-        renderContext,
+        renderContext, "bar",
       );
       const bubble = createMetricValueBlock(
         metric,
@@ -3533,6 +3929,7 @@ function renderComparisonTable(renderContext) {
         rowData.mode,
         false,
       );
+      bubble.prepend(metricProgress(metric, metricResult.avgValue, rowData.mode, metricColor));
       metricCell.append(bubble);
       row.append(metricCell);
     }
@@ -3542,6 +3939,13 @@ function renderComparisonTable(renderContext) {
 }
 
 function refreshLiveStatusText() {
+  for (const row of document.querySelectorAll(".site-row[data-url]")) {
+    const tracker = state.trackers.get(row.dataset.url);
+    const status = row.querySelector(".site-status");
+    if (tracker && status) {
+      status.textContent = `● ${describeTrackerStatus(tracker)}${state.comparisonBaseUrl === tracker.url ? " · Baseline" : ""}`;
+    }
+  }
   for (const card of urlCardsContainer.querySelectorAll(".url-card[data-url]")) {
     const url = card.dataset.url;
     const tracker = state.trackers.get(url);
@@ -3579,6 +3983,7 @@ function persistState() {
       apiKey: state.apiKey,
       pollIntervalSec: state.pollIntervalSec,
       themeMode: state.themeMode,
+      colorMode: state.colorMode,
       glimmDev: state.glimmDev,
       comparisonBaseUrl: state.comparisonBaseUrl,
       showDetails: state.showDetails,
@@ -3612,12 +4017,14 @@ function hydrateState() {
     if (typeof parsed.themeMode === "string" && THEME_MODES.has(parsed.themeMode)) {
       state.themeMode = parsed.themeMode;
     }
+    if (parsed.colorMode === "absolute" || parsed.colorMode === "relative") {
+      state.colorMode = parsed.colorMode;
+    }
     if (parsed.glimmDev && typeof parsed.glimmDev === "object") {
       hydrateGlimmDevState(parsed.glimmDev);
     }
-    if (typeof parsed.showDetails === "boolean") {
-      state.showDetails = parsed.showDetails;
-    }
+    // Site details are always visible in the selected site's panel.
+    state.showDetails = true;
 
     if (parsed.sort && typeof parsed.sort === "object") {
       const sortKey = typeof parsed.sort.key === "string" ? parsed.sort.key : null;
@@ -3677,6 +4084,12 @@ function hydrateState() {
   }
 }
 
+let showFirstRunIntro = false;
+try {
+  showFirstRunIntro = !localStorage.getItem(STORAGE_KEY) && !localStorage.getItem("pagespeeder-onboarding-seen");
+} catch (error) {
+  console.warn("Failed to check onboarding state", error);
+}
 hydrateState();
 applyThemeMode();
 syncGlimmDevPanel();
@@ -3689,3 +4102,7 @@ for (const tracker of state.trackers.values()) {
 }
 
 render();
+if (showFirstRunIntro) {
+  try { localStorage.setItem("pagespeeder-onboarding-seen", "1"); } catch (error) { console.warn("Failed to save onboarding state", error); }
+  openApiKeyDialog({ onboarding: true });
+}

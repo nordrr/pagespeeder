@@ -30,7 +30,7 @@
   --button-danger-confirm-bg: #b91c1c;
   --button-danger-confirm-border: #991b1b;
   --button-danger-confirm-hover-bg: #991b1b;
-  --button-hover-shadow: 0 10px 22px rgba(15, 23, 42, 0.12);
+  --button-hover-shadow: 0 2px 5px rgba(15, 23, 42, 0.08);
   --toggle-running-bg: #0d8a49;
   --toggle-running-hover-bg: #0a733c;
   --toggle-paused-bg: #edf1f5;
@@ -93,7 +93,7 @@
   --button-danger-confirm-bg: #b91c1c;
   --button-danger-confirm-border: #ef4444;
   --button-danger-confirm-hover-bg: #991b1b;
-  --button-hover-shadow: 0 4px 12px rgba(2, 6, 23, 0.55);
+  --button-hover-shadow: 0 2px 5px rgba(2, 6, 23, 0.2);
   --toggle-running-bg: #15803d;
   --toggle-running-hover-bg: #166534;
   --toggle-paused-bg: #1e293b;
@@ -612,24 +612,22 @@ button:disabled {
   cursor: not-allowed;
 }
 
-button:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(.drag-handle):not(.theme-mode-button):not(:disabled):hover {
+button:not(.workspace-tab):not(.site-item):not(.site-action):not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(.drag-handle):not(.theme-mode-button):not(:disabled):hover {
   box-shadow: var(--button-hover-shadow);
   transform: translateY(-1px);
 }
 
-button:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(.drag-handle):not(.theme-mode-button):not(:disabled):active {
+button:not(.workspace-tab):not(.site-item):not(.site-action):not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(.drag-handle):not(.theme-mode-button):not(:disabled):active {
   transform: translateY(0) scale(0.98);
 }
 
-button:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(.drag-handle):not(.theme-mode-button):not(.secondary):not(.danger):not(:disabled):hover {
+button:not(.workspace-tab):not(.site-item):not(.site-action):not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(.drag-handle):not(.theme-mode-button):not(.secondary):not(.danger):not(:disabled):hover {
   background: var(--accent-hover);
   border-color: color-mix(in srgb, var(--accent-hover) 84%, black 16%);
-  box-shadow:
-    0 14px 28px color-mix(in srgb, var(--accent) 28%, transparent),
-    0 1px 0 rgb(255 255 255 / 0.2) inset;
+  box-shadow: var(--button-hover-shadow);
 }
 
-button.secondary:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(.drag-handle):not(.theme-mode-button):not(.remove-confirm):not(:disabled):hover {
+button.secondary:not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(.drag-handle):not(.theme-mode-button):not(.remove-confirm):not(.set-baseline.is-active):not(:disabled):hover {
   background: var(--button-secondary-hover-bg);
   border-color: var(--button-secondary-hover-border);
 }
