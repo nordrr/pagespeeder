@@ -64,3 +64,25 @@ export function metricContribution(strategy, metricKey, value) {
   };
 }
 
+// All currently supported metrics improve as their measured value decreases.
+export function metricImprovementExample(strategy, metricKey, value) {
+  if (!Number.isFinite(value) || value <= 0) return null;
+  const current = metricContribution(strategy, metricKey, value);
+  if (!current) return null;
+  const target = value * 0.75;
+  const improved = metricContribution(strategy, metricKey, target);
+  let onePointTarget = null;
+  const maximum = metricContribution(strategy, metricKey, 0);
+  if (maximum.points - current.points >= 1) {
+    let low = 0;
+    let high = value;
+    for (let i = 0; i < 60; i += 1) {
+      const mid = (low + high) / 2;
+      if (metricContribution(strategy, metricKey, mid).points >= current.points + 1) low = mid;
+      else high = mid;
+    }
+    onePointTarget = low;
+  }
+  return { target, gain: Math.max(0, improved.points - current.points), onePointTarget };
+}
+

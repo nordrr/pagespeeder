@@ -15,6 +15,7 @@ import { summarize, getPercentile } from "./src/statistics.mjs";
 import { SCORING_MODEL_VERSION, metricContribution } from "./src/lighthouse-scoring.mjs";
 import { fetchPsiSample, isDuplicateSample } from "./src/tracking/pagespeed.mjs";
 import { createTooltipController } from "./src/ui/tooltips.mjs";
+import { mountImprovementControls } from "./src/ui/improvement-controls.mjs";
 import { createTrackerScheduler } from "./src/tracking/scheduler.mjs";
 import { createConnectedEdgeShadow, updateConnectedEdgeShadow } from "./src/ui/connected-edges.mjs";
 import { createWorkspaceNavigation } from "./src/ui/navigation.mjs";
@@ -146,7 +147,7 @@ const { renderScoreHistory, closeRunDetailPanel, openRunDetailPanel, renderRunDe
   positionRunSelection, followRunSeam } = createRunsController({
   state, runDetailPanel, runDetailCloseButton, runDetailContent, METRICS, SCORING_MODEL_VERSION,
   closeSvg, iconMarkup, buildRenderContext, getRunBackgroundColor, getMetricBackgroundColor,
-  createPaneProgress, metricContribution, formatPointValue, attachTooltipHandlers,
+  getSummaryBackgroundColor, createPaneProgress, metricContribution, formatPointValue, attachTooltipHandlers,
   updateConnectedEdgeShadow,
 });
 
@@ -164,6 +165,10 @@ runDetailCloseButton?.addEventListener("click", () => {
   closeRunDetailPanel();
 });
 colorModeButton.dataset.tooltip = document.getElementById("color-mode-description").textContent;
+colorModeButton.dataset.tooltipRows = JSON.stringify([
+  ["Absolute", "Color by score"],
+  ["Relative", "Compare sites or baseline"],
+]);
 attachTooltipHandlers(colorModeButton);
 themeModeButtons.forEach(attachTooltipHandlers);
 colorModeButton.addEventListener("click", () => {
@@ -227,6 +232,12 @@ autoPauseTargetInput.addEventListener("change", () => {
   persistState();
   render();
 });
+function updateImprovementPercentage(index, value) {
+  state.improvementPercentages[index] = value;
+  persistState();
+  window.dispatchEvent(new Event("improvement-settings-change"));
+  urlCardsContainer.querySelector(".url-card")?.dispatchEvent(new Event("improvement-settings-change"));
+}
 for (const field of glimmDevFields) {
   field.addEventListener("input", () => updateGlimmDevSetting(field));
   field.addEventListener("change", () => updateGlimmDevSetting(field));
@@ -1077,6 +1088,7 @@ const { renderCards, scheduleHeaderHeightSync } = createSiteDetailsView({
     get draggedTrackerUrl() { return draggedTrackerUrl; }, set draggedTrackerUrl(value) { draggedTrackerUrl = value; },
     get dragPreviewAnimating() { return dragPreviewAnimating; }, set dragPreviewAnimating(value) { dragPreviewAnimating = value; },
   }, urlCardsContainer, urlCardTemplate, urlInput, isDev: import.meta.env.DEV,
+  mountImprovementControls: node => mountImprovementControls(node, { state, onChange: updateImprovementPercentage }),
   hasApiKey, openApiKeyDialog, loadDemoSites, getOrderedTrackers, viewTransitionNameForUrl,
   parseUrlSafe, attachTooltipHandlers, beginLabelEditing, hideTooltip, setGlobalDraggingCursor,
   getTransparentDragImage, createDragPreview, clearDropTargets, clearDragCardClasses,
@@ -1181,6 +1193,7 @@ function hydrateState() {
 }
 
 hydrateState();
+mountImprovementControls(document.getElementById("settings-improvements"), { state, onChange: updateImprovementPercentage });
 applyThemeMode();
 syncGlimmDevPanel();
 scheduleGlimmAutoplay();

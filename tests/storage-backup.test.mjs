@@ -13,7 +13,7 @@ const site = (url = 'https://example.com') => ({ url, label: 'Example', history:
 const tracker = url => ({url, label: '', history: {mobile: [], desktop: []}, runErrors: {mobile: '', desktop: ''}});
 
 function context(raw) {
-  const state = { apiKey: '', pollIntervalSec: 60, autoPauseTarget: 2, themeMode: 'auto', colorMode: 'absolute', glimmDev: {}, showDetails: true, sort: {key: null, direction: null}, trackers: new Map(), trackerOrder: [], comparisonBaseUrl: null };
+  const state = { apiKey: '', pollIntervalSec: 60, autoPauseTarget: 2, improvementPercentages: [25, 50], themeMode: 'auto', colorMode: 'absolute', glimmDev: {}, showDetails: true, sort: {key: null, direction: null}, trackers: new Map(), trackerOrder: [], comparisonBaseUrl: null };
   const values = new Map(raw === undefined ? [] : [[STORAGE_KEY, raw]]);
   const storage = {getItem: k => values.get(k), setItem: (k,v) => values.set(k,v)};
   const normalizeTrackerOrder = () => {
@@ -68,4 +68,18 @@ test('storage failures are reported without escaping to callers', () => {
   c.storage.setItem = () => { throw new Error('quota'); };
   persistState(c);
   assert.deepEqual(errors.map(e => e[0]), ['Failed to load saved state', 'Failed to persist state']);
+});
+
+test('improvement percentages persist and invalid saved values retain defaults', () => {
+  const c = context();
+  c.state.improvementPercentages = [10, 70];
+  persistState(c);
+  const restored = context(c.values.get(STORAGE_KEY));
+  hydrateState(restored);
+  assert.deepEqual(restored.state.improvementPercentages, [10, 70]);
+  for (const invalid of [[0, 50], [25, 100], [25, '50'], [25], null]) {
+    const bad = context(JSON.stringify({ improvementPercentages: invalid }));
+    hydrateState(bad);
+    assert.deepEqual(bad.state.improvementPercentages, [25, 50]);
+  }
 });

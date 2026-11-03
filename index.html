@@ -218,7 +218,8 @@
         <div class="settings-sections">
           <section class="settings-section"><div><h2>PageSpeed API key</h2><p>Your key is saved in this browser and sent directly to Google when you run an audit.</p></div><button id="open-settings" type="button" class="secondary api-key-button"><span>Manage API key</span><span id="api-key-status" class="status-dot-label">Not set</span></button></section>
           <section class="settings-section"><div><h2>Appearance</h2><p>Choose how PageSpeeder looks.</p></div><div id="settings-theme-options" class="settings-theme-options" role="group" aria-label="Appearance"><span class="settings-theme-indicator" aria-hidden="true"></span><button type="button" class="secondary" data-setting-theme="auto"><svg aria-hidden="true"></svg><span>System</span></button><button type="button" class="secondary" data-setting-theme="light"><svg aria-hidden="true"></svg><span>Light</span></button><button type="button" class="secondary" data-setting-theme="dark"><svg aria-hidden="true"></svg><span>Dark</span></button></div></section>
-          <section class="settings-section"><div><h2>Tracking defaults</h2><p>Pause automatically when both mobile and desktop averages reach this 95% confidence range, after at least 10 runs each. Reports run once per minute.</p></div><label class="settings-goal"><span>Auto-pause target</span><span class="settings-select-wrap"><select id="auto-pause-target"><option value="1">±1 point</option><option value="2" selected>±2 points</option><option value="3">±3 points</option><option value="4">±4 points</option><option value="5">±5 points</option><option value="off">Never auto-pause</option></select><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></label></section>
+          <section class="settings-section"><div><h2>Tracking defaults</h2><p>Pause automatically when both mobile and desktop averages reach this 95% confidence range, after at least 10 runs each. Reports run once per minute.</p></div><label class="settings-goal"><span>Auto-pause target</span><span class="settings-select-wrap"><select id="auto-pause-target"><option value="1">±1 point</option><option value="2">±2 points</option><option value="3" selected>±3 points</option><option value="4">±4 points</option><option value="5">±5 points</option><option value="off">Never auto-pause</option></select><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></label></section>
+          <section class="settings-section"><div><h2>Improvement estimates</h2><p>Choose the two reductions shown in the site details. The first determines the ranking.</p></div><div id="settings-improvements" class="settings-improvements"></div></section>
           <section class="settings-section settings-data-section"><div><h2>Data</h2><p>Back up sites, labels, run history, and your baseline. Settings aren’t included; your API key is included only if selected.</p></div><div class="settings-data-controls"><label class="settings-export-key"><input id="export-include-key" type="checkbox" /><span>Include API key</span></label><div class="settings-data-actions"><button id="export-data" type="button" class="secondary">Export data</button><button id="import-data" type="button" class="secondary">Import data</button><input id="import-file" type="file" accept="application/json,.json" hidden /></div></div><p id="data-status" class="settings-data-status" role="status" aria-live="polite"></p></section>
         </div>
       </section>
@@ -307,9 +308,16 @@
               </thead>
               <tbody class="metric-summary-body"></tbody>
             </table></div>
+            <section class="metric-priorities" hidden>
+              <div class="metric-priorities-header">
+                <div class="metric-priorities-intro"><h4>Where to focus</h4><p class="metric-priorities-description"></p></div>
+                <div class="metric-priority-controls settings-improvements"></div>
+              </div>
+              <div class="metric-priority-columns"></div>
+            </section>
           </section>
           <section class="score-history-section">
-            <h4>Score Runs</h4>
+            <h4>Score Runs <span class="run-average-legend"><span class="run-average-legend-mark" aria-hidden="true"></span> Avg &amp; 95% range</span></h4>
             <div class="score-history-scroll">
               <span class="run-selection" aria-hidden="true" hidden></span>
               <span class="run-selection-shadow" aria-hidden="true" hidden></span>

@@ -24,7 +24,7 @@ test('summary preserves metric averages, confidence and latest input timestamp',
   assert.equal(result.avgScore, 80);
   assert.equal(result.scoreStdDev, Math.sqrt(200));
   assert.equal(result.latestTimestamp, 100);
-  assert.deepEqual(result.metrics.cls, { avgValue: 84, avgScore: 76, ci95Value: 19.6 });
+  assert.deepEqual(result.metrics.cls, { avgValue: 84, avgScore: 76, ci95Value: 19.6, ci95Score: 19.6 });
   assert.equal(summarize([sample(70, 1)]).metrics.fcp.ci95Value, null);
 });
 

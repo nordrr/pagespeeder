@@ -1,13 +1,47 @@
+import { addAverageMarker, averageComparison, averageComparisonRows, confidenceBounds } from "./run-average.mjs";
+import { findRunNavigationTarget } from "./run-navigation.mjs";
+import { metricOpportunityRows } from "./metric-opportunity.mjs";
+
 // Owns score-history rendering and the connected run-detail pane. Dependencies
 // are passed in so the controller shares the app's current state and helpers.
 export function createRunsController({
   state, runDetailPanel, runDetailCloseButton, runDetailContent,
   METRICS, SCORING_MODEL_VERSION, closeSvg, iconMarkup,
-  buildRenderContext, getRunBackgroundColor, getMetricBackgroundColor,
+  buildRenderContext, getRunBackgroundColor, getMetricBackgroundColor, getSummaryBackgroundColor,
   createPaneProgress, metricContribution, formatPointValue,
   attachTooltipHandlers, updateConnectedEdgeShadow,
 }) {
   let runDetailReturnFocusElement = null;
+
+  document.addEventListener("keydown", (event) => {
+    if (!state.runDetail || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey ||
+        !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+    const active = event.target;
+    if (!(active instanceof Element) ||
+        (!active.closest(".run-score-button, .run-row-close") && active !== runDetailCloseButton)) return;
+
+    const tbody = document.querySelector(".score-history-body");
+    if (!tbody) return;
+    const rows = Array.from(tbody.querySelectorAll("tr"), (row) => {
+      const mobile = row.querySelector('.run-score-button[data-mode="mobile"]');
+      const desktop = row.querySelector('.run-score-button[data-mode="desktop"]');
+      return { runNumber: Number((mobile || desktop)?.dataset.runNumber), mobile, desktop };
+    });
+    const target = findRunNavigationTarget(rows, state.runDetail.runNumber, state.runDetail.mode, event.key);
+    event.preventDefault();
+    if (!target) return;
+    target.click();
+    target.focus({ preventScroll: true });
+    const scroller = target.closest(".score-history-scroll");
+    const header = scroller?.querySelector("thead");
+    if (scroller) {
+      const bounds = target.getBoundingClientRect();
+      const visibleTop = Math.max(scroller.getBoundingClientRect().top, header?.getBoundingClientRect().bottom ?? -Infinity);
+      const visibleBottom = scroller.getBoundingClientRect().bottom;
+      if (bounds.top < visibleTop) scroller.scrollTop -= visibleTop - bounds.top;
+      else if (bounds.bottom > visibleBottom) scroller.scrollTop += bounds.bottom - visibleBottom;
+    }
+  });
 
 function buildScoreRows(tracker, limit = 200) {
   const mobileSamples = tracker.history.mobile;
@@ -125,6 +159,9 @@ function renderScoreCell(cell, sample, mode, renderContext, tracker, rowData) {
   }
 
   const score = sample.performanceScore;
+  const summary = renderContext.summariesByUrl.get(tracker.url)?.[mode];
+  const average = summary?.avgScore;
+  const bounds = confidenceBounds(average, summary?.ci95HalfWidth);
   const color = getRunBackgroundColor(mode, score, renderContext, "bar");
   cell.className = mode === "mobile" ? "score-cell-mobile" : "score-cell-desktop";
   cell.style.backgroundColor = "";
@@ -143,12 +180,17 @@ function renderScoreCell(cell, sample, mode, renderContext, tracker, rowData) {
   const number = document.createElement("span");
   number.className = "run-score-number";
   number.textContent = score.toFixed(0);
-  pill.append(createPaneProgress(score, color), number);
+  const progress = createPaneProgress(score, color);
+  addAverageMarker(progress, average, bounds, getSummaryBackgroundColor(mode, average, renderContext, "bar"));
+  pill.append(progress, number);
   button.append(pill);
   button.setAttribute(
     "aria-label",
-    `Open run ${rowData.runNumber} ${mode} score ${score.toFixed(0)} details`,
+    `Open run ${rowData.runNumber} ${mode} score ${score.toFixed(0)} details. ${averageComparison(score, average, "points", bounds)}`,
   );
+  button.dataset.tooltip = averageComparison(score, average, "points", bounds);
+  button.dataset.tooltipRows = JSON.stringify(averageComparisonRows(score, average, "points", bounds));
+  attachTooltipHandlers(button);
   button.addEventListener("click", () => {
     openRunDetailPanel(tracker, mode, sample, rowData.runNumber, button);
   });
@@ -302,6 +344,12 @@ function renderRunDetailPanel(renderContext = null) {
   const runScore = detail.sample.performanceScore;
   const colorContext = renderContext || buildRenderContext();
   const runScoreColor = getRunBackgroundColor(detail.mode, runScore, colorContext, "bar");
+  const summary = colorContext.summariesByUrl.get(detail.url)?.[detail.mode];
+
+  const legend = document.createElement("p");
+  legend.className = "run-average-legend";
+  legend.innerHTML = '<span class="run-average-legend-mark" aria-hidden="true"></span> Site average and 95% range';
+  runDetailContent.append(legend);
 
   const metaGrid = document.createElement("dl");
   metaGrid.className = "run-detail-meta-grid";
@@ -321,7 +369,14 @@ function renderRunDetailPanel(renderContext = null) {
       dd.className = "run-detail-score";
     }
     item.append(dt, dd);
-    if (label === "Performance") item.append(createPaneProgress(runScore, runScoreColor));
+    if (label === "Performance") {
+      const progress = createPaneProgress(runScore, runScoreColor);
+      const bounds = confidenceBounds(summary?.avgScore, summary?.ci95HalfWidth);
+      addAverageMarker(progress, summary?.avgScore, bounds, getSummaryBackgroundColor(detail.mode, summary?.avgScore, colorContext, "bar"));
+      const comparison = averageComparison(runScore, summary?.avgScore, "points", bounds);
+      if (comparison) { item.dataset.tooltip = comparison; item.dataset.tooltipRows = JSON.stringify(averageComparisonRows(runScore, summary?.avgScore, "points", bounds)); item.setAttribute("aria-label", `Performance ${value}. ${comparison}`); attachTooltipHandlers(item); }
+      item.append(progress);
+    }
     metaGrid.append(item);
   }
   runDetailContent.append(metaGrid);
@@ -335,6 +390,8 @@ function renderRunDetailPanel(renderContext = null) {
 
   for (const metric of METRICS) {
     const metricData = detail.sample.metrics[metric.key];
+    const metricAverage = summary?.metrics?.[metric.key];
+    const averageColor = getMetricBackgroundColor(detail.mode, metric.key, metricAverage?.avgValue, colorContext, "bar");
     const row = document.createElement("tr");
 
     const nameCell = document.createElement("td");
@@ -350,7 +407,12 @@ function renderRunDetailPanel(renderContext = null) {
     if (metricData && Number.isFinite(metricData.score)) {
       const scoreValue = Math.max(0, Math.min(100, metricData.score));
       scoreCell.textContent = scoreValue.toFixed(0);
-      scoreCell.prepend(createPaneProgress(scoreValue, getMetricBackgroundColor(detail.mode, metric.key, metricData.value, colorContext, "bar")));
+      const progress = createPaneProgress(scoreValue, getMetricBackgroundColor(detail.mode, metric.key, metricData.value, colorContext, "bar"));
+      const bounds = confidenceBounds(metricAverage?.avgScore, metricAverage?.ci95Score);
+      addAverageMarker(progress, metricAverage?.avgScore, bounds, averageColor);
+      const comparison = averageComparison(scoreValue, metricAverage?.avgScore, "points", bounds);
+      if (comparison) { scoreCell.dataset.tooltip = comparison; scoreCell.dataset.tooltipRows = JSON.stringify(averageComparisonRows(scoreValue, metricAverage?.avgScore, "points", bounds)); scoreCell.setAttribute("aria-label", `${metric.label} Lighthouse score ${scoreValue.toFixed(0)}. ${comparison}`); attachTooltipHandlers(scoreCell); }
+      scoreCell.prepend(progress);
     } else {
       scoreCell.textContent = "--";
     }
@@ -363,9 +425,31 @@ function renderRunDetailPanel(renderContext = null) {
       if (contribution) {
         pointsCell.textContent = `${formatPointValue(contribution.points)} / ${formatPointValue(contribution.maxPoints)}`;
         const percent = (contribution.points / contribution.maxPoints) * 100;
-        pointsCell.prepend(createPaneProgress(percent, getMetricBackgroundColor(detail.mode, metric.key, metricData.value, colorContext, "bar")));
-        pointsCell.dataset.tooltip = `${SCORING_MODEL_VERSION} weighted contribution to the 100-point performance score.`;
-        pointsCell.title = pointsCell.dataset.tooltip;
+        const progress = createPaneProgress(percent, getMetricBackgroundColor(detail.mode, metric.key, metricData.value, colorContext, "bar"));
+        const averageContribution = metricContribution(detail.mode, metric.key, metricAverage?.avgValue);
+        let pointBounds = null;
+        if (averageContribution && Number.isFinite(metricAverage?.ci95Value)) {
+          const low = metricContribution(detail.mode, metric.key, metricAverage.avgValue + metricAverage.ci95Value);
+          const high = metricContribution(detail.mode, metric.key, Math.max(0, metricAverage.avgValue - metricAverage.ci95Value));
+          if (low && high) pointBounds = { low: low.points, high: high.points };
+        }
+        if (averageContribution) addAverageMarker(progress, averageContribution.score, pointBounds && {
+          low: pointBounds.low / averageContribution.maxPoints * 100,
+          high: pointBounds.high / averageContribution.maxPoints * 100,
+        }, averageColor);
+        pointsCell.prepend(progress);
+        const comparison = averageComparison(contribution.points, averageContribution?.points, "points", pointBounds);
+        pointsCell.dataset.tooltip = `Weighted points use Google's Lighthouse ${SCORING_MODEL_VERSION} scoring; estimates assume other metrics stay the same.`;
+        pointsCell.dataset.tooltipIntro = comparison
+          ? `Lighthouse ${SCORING_MODEL_VERSION} estimates hold other metrics constant; site averages use the average measured value.`
+          : pointsCell.dataset.tooltip;
+        const tooltipRows = [["This run", `${formatPointValue(contribution.points)} / ${formatPointValue(contribution.maxPoints)} points`]];
+        if (comparison) {
+          tooltipRows.push(...averageComparisonRows(contribution.points, averageContribution?.points, "points", pointBounds).map(([label, value]) => [label === "This run" ? "Difference" : label, value]));
+        }
+        tooltipRows.push(...metricOpportunityRows(metric, detail.mode, metricData.value));
+        pointsCell.dataset.tooltipRows = JSON.stringify(tooltipRows);
+        if (comparison) pointsCell.setAttribute("aria-label", `${metric.label} ${formatPointValue(contribution.points)} of ${formatPointValue(contribution.maxPoints)} points. ${comparison}, calculated from the average measured value.`);
         attachTooltipHandlers(pointsCell);
       } else {
         pointsCell.textContent = "--";

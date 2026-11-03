@@ -48,6 +48,7 @@ export function summarize(samples) {
       avgValue: mean(values),
       avgScore: mean(scores),
       ci95Value: ci95(values),
+      ci95Score: ci95(scores),
     };
   }
 

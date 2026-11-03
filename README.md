@@ -34,7 +34,7 @@ Open [http://localhost:3000](http://localhost:3000), add your API key, and enter
 
 PageSpeeder requests mobile and desktop reports from Google's PageSpeed Insights API. The app schedules each site's next cycle for approximately one minute after the previous cycle starts; if a request takes longer, the next cycle waits for it to finish. Keep the app open while tracking—runs are scheduled in the browser, not on a server.
 
-The default auto-pause target is **±2 points** for the 95% confidence interval of each average, with at least 10 successful samples for both mobile and desktop. In **Settings**, you can choose a target from ±1 to ±5 points or turn auto-pause off. These intervals describe variability in the collected reports; they don't guarantee a site's future score.
+The default auto-pause target is **±3 points** for the 95% confidence interval of each average, with at least 10 successful samples for both mobile and desktop. In **Settings**, you can choose a target from ±1 to ±5 points or turn auto-pause off. These intervals describe variability in the collected reports; they don't guarantee a site's future score.
 
 Use **Run now** for an additional cycle, or **Start** and **Pause** to control ongoing tracking. Choose a baseline to compare results, and open a score run to inspect its details.
 

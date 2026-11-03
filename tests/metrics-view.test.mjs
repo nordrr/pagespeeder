@@ -46,6 +46,7 @@ test('goal and baseline labels retain edge-case formatting', () => {
   assert.equal(view.formatGoalEstimate({ samples: 10, scoreStdDev: 0 }), '±2 reached');
   state.autoPauseTarget = null;
   assert.equal(view.formatGoalEstimate(null), 'Auto-pause off');
-  assert.deepEqual(view.baselineDelta(2, 0), { label: '+2.0 pts vs baseline', detail: '+2.0 pts (--%) compared to baseline' });
+  assert.deepEqual(view.baselineDelta(2, 0), { label: '+2.0 pts vs baseline', detail: '+2.0 pts (--%) compared to baseline', rows: [['Difference', '+2.0 points'], ['Relative change', 'Unavailable']] });
+  assert.deepEqual(view.baselineDelta(-2, 20).rows, [['Difference', '-2.0 points'], ['Relative change', '-10.0%']]);
   assert.equal(view.formatConfidence(null), 'Need 2+ samples');
 });

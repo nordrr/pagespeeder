@@ -61,7 +61,30 @@ function showTooltipNow(text, anchor) {
   if (!uiTooltip || !text || !anchor || !anchor.isConnected) {
     return;
   }
-  uiTooltip.textContent = text;
+  uiTooltip.textContent = "";
+  uiTooltip.classList.toggle("ui-tooltip-wide", Boolean(anchor.dataset.tooltipWide));
+  uiTooltip.classList.toggle("ui-tooltip-structured", Boolean(anchor.dataset.tooltipRows));
+  if (anchor.dataset.tooltipRows) {
+    if (anchor.dataset.tooltipIntro) {
+      const intro = document.createElement("div");
+      intro.className = "ui-tooltip-intro";
+      intro.textContent = anchor.dataset.tooltipIntro;
+      uiTooltip.append(intro);
+    }
+    const rows = JSON.parse(anchor.dataset.tooltipRows);
+    for (const [label, value] of rows) {
+      const row = document.createElement("div");
+      row.className = "ui-tooltip-row";
+      const labelElement = document.createElement("span");
+      labelElement.textContent = label;
+      const valueElement = document.createElement("span");
+      valueElement.textContent = value;
+      row.append(labelElement, valueElement);
+      uiTooltip.append(row);
+    }
+  } else {
+    uiTooltip.textContent = text;
+  }
   tooltipAnchor = anchor;
   uiTooltip.hidden = false;
   positionTooltip();

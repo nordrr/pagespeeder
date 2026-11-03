@@ -2,7 +2,7 @@
 button { font-weight: 600; }
 .workspace-tab, .site-action { font-weight: 600; }
 /* Soft pill controls and gently elevated surfaces, informed by HeroUI. */
-button:not(.workspace-tab):not(.site-item):not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(.drag-handle),
+button:not(.workspace-tab):not(.site-item):not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(.drag-handle):not(.improvement-step),
 .site-menu summary { border-radius: 999px; }
 button:not(.workspace-tab):not(.site-item):not(.url-card-title):not(.run-score-button):not(.inline-link-btn):not(.drag-handle):focus-visible,
 .site-menu summary:focus-visible { outline-offset: 2px; }

@@ -1,3 +1,6 @@
+import { METRICS } from "../metrics.mjs";
+import { describeMetricScenario, formatDisplayedReduction, rankMetricOpportunities } from "./metric-opportunity.mjs";
+
 // Renders the selected site's card and keeps its header height in sync.
 // shared supplies getters/setters for mutable state also owned by the app.
 export function createSiteDetailsView({
@@ -10,9 +13,10 @@ export function createSiteDetailsView({
   playSvg, pauseSvg, zapSvg, trashSvg, ICON_BASELINE, stopTracker,
   ensureApiKeyConfigured, startTracker, triggerImmediateCycle, runWithViewTransition,
   openRemoveSiteDialog, renderSummaryTile, renderMetricSummary, renderScoreHistory,
-  createConnectedEdgeShadow, positionRunSelection, followRunSeam,
+  createConnectedEdgeShadow, positionRunSelection, followRunSeam, mountImprovementControls,
 }) {
 let headerSyncRafId = null;
+let unmountImprovementControls = null;
 
 function syncUrlCardHeaderHeights() {
   const headers = Array.from(urlCardsContainer.querySelectorAll(".url-card > header"));
@@ -72,6 +76,8 @@ function scheduleHeaderHeightSync() {
 }
 
 function renderCards(renderContext) {
+  unmountImprovementControls?.();
+  unmountImprovementControls = null;
   const scrollByUrl = new Map();
   const historySlot = document.getElementById("score-history-slot");
   const existingScroller = historySlot.querySelector(".score-history-scroll");
@@ -401,6 +407,110 @@ function renderCards(renderContext) {
         isBaselineCard: isBaseCard,
       });
       renderScoreHistory(scoreHistoryBody, tracker, renderContext);
+    }
+    const priorities = card.querySelector(".metric-priorities");
+    priorities.hidden = !state.showDetails || (!mobileSummary && !desktopSummary);
+    const updatePriorities = () => {
+      if (priorities.hidden) return;
+      const percentages = state.improvementPercentages || [25, 50];
+      priorities.querySelector(".metric-priorities-description").textContent = "Calculate which metrics would have the biggest impact on your performance score if improved.";
+      const columns = priorities.querySelector(".metric-priority-columns");
+      columns.replaceChildren();
+      for (const [mode, summary] of [["mobile", mobileSummary], ["desktop", desktopSummary]]) {
+        const column = document.createElement("div");
+        column.className = "metric-priority-column";
+        const heading = document.createElement("h5");
+        heading.textContent = mode === "mobile" ? "Mobile" : "Desktop";
+        column.append(heading);
+        const shell = document.createElement("div");
+        shell.className = "metric-priority-shell";
+        column.append(shell);
+        const items = rankMetricOpportunities(METRICS, mode, summary, percentages);
+        if (!items.length) {
+          const empty = document.createElement("p");
+          empty.className = "metric-priority-empty";
+          empty.textContent = summary ? "Little score gain from a 25% improvement." : "No runs yet.";
+          shell.append(empty);
+        } else {
+          const table = document.createElement("table");
+          table.className = "metric-priority-table";
+          table.setAttribute("aria-label", `${heading.textContent} score opportunities, ranked by ${percentages[0]}% improvement`);
+          const head = document.createElement("thead");
+          const headerRow = document.createElement("tr");
+          for (const label of ["Metric", "Target (reduction)", "Gain"]) {
+            const th = document.createElement("th");
+            th.scope = "col";
+            th.textContent = label;
+            headerRow.append(th);
+          }
+          head.append(headerRow);
+          table.append(head);
+          for (const item of items) {
+            const body = document.createElement("tbody");
+            if (item.status !== "available") {
+              const line = document.createElement("tr");
+              const name = document.createElement("th");
+              name.scope = "rowgroup";
+              const metricName = document.createElement("span");
+              metricName.textContent = item.metric.label;
+              name.append(metricName);
+              if (item.status === "maximum" || item.status === "near-maximum") {
+                const current = document.createElement("small");
+                current.textContent = item.metric.format(item.value);
+                name.append(current);
+              }
+              const message = document.createElement("td");
+              message.colSpan = 2;
+              message.className = "metric-priority-status";
+              message.textContent = item.status === "maximum" ? "Already at maximum points" : item.status === "near-maximum" ? "Less than 0.05 points remain" : "No data yet";
+              line.append(name, message);
+              body.append(line);
+            }
+            for (const [index, scenario] of item.scenarios.entries()) {
+              const line = document.createElement("tr");
+              line.dataset.tooltip = describeMetricScenario(item.metric, item.value, scenario, summary?.avgScore, mode);
+              line.dataset.tooltipWide = "true";
+              line.setAttribute("aria-label", line.dataset.tooltip);
+              line.tabIndex = 0;
+              attachTooltipHandlers(line);
+              if (index === 0) {
+                const name = document.createElement("th");
+                name.scope = "rowgroup";
+                name.rowSpan = item.scenarios.length;
+                const metricName = document.createElement("span");
+                metricName.textContent = item.metric.label;
+                const current = document.createElement("small");
+                current.textContent = item.metric.format(item.value);
+                name.append(metricName, current);
+                line.append(name);
+              }
+              const change = document.createElement("td");
+              const percentage = document.createElement("span");
+              percentage.className = "metric-priority-percentage";
+              percentage.textContent = `${Math.round(scenario.fraction * 100)}%`;
+              change.append(percentage, document.createTextNode(` ${item.metric.format(scenario.target)} `));
+              const reduction = document.createElement("strong");
+              reduction.className = "metric-priority-reduction";
+              reduction.textContent = `(−${formatDisplayedReduction(item.metric, item.value, scenario.target)})`;
+              change.append(reduction);
+              change.setAttribute("aria-label", `From ${item.metric.format(item.value)} to ${item.metric.format(scenario.target)}, ${formatDisplayedReduction(item.metric, item.value, scenario.target)} lower`);
+              const gain = document.createElement("td");
+              gain.className = "metric-priority-gain";
+              gain.textContent = scenario.gain < 0.05 ? "<0.1 pt" : `+${scenario.gain.toFixed(1)} pts`;
+              line.append(change, gain);
+              body.append(line);
+            }
+            table.append(body);
+          }
+          shell.append(table);
+        }
+        columns.append(column);
+      }
+    };
+    if (!priorities.hidden) {
+      unmountImprovementControls = mountImprovementControls(priorities.querySelector(".metric-priority-controls"));
+      updatePriorities();
+      card.addEventListener("improvement-settings-change", updatePriorities);
     }
     errorText.textContent = tracker.lastError;
 

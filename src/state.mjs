@@ -7,7 +7,8 @@ export function createInitialState() {
 return {
   apiKey: "",
   pollIntervalSec: FIXED_POLL_INTERVAL_SEC,
-  autoPauseTarget: 2,
+  autoPauseTarget: 3,
+  improvementPercentages: [25, 50],
   trackers: new Map(),
   trackerOrder: [],
   comparisonBaseUrl: null,

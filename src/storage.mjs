@@ -22,6 +22,7 @@ export function persistState({ state, normalizeTrackerOrder, storage, storageKey
       apiKey: state.apiKey,
       pollIntervalSec: state.pollIntervalSec,
       autoPauseTarget: state.autoPauseTarget,
+      improvementPercentages: state.improvementPercentages,
       themeMode: state.themeMode,
       colorMode: state.colorMode,
       glimmDev: state.glimmDev,
@@ -55,6 +56,9 @@ export function hydrateState({ state, storage, storageKey = STORAGE_KEY, apiKeyI
     state.pollIntervalSec = FIXED_POLL_INTERVAL_SEC;
     if ([1, 2, 3, 4, 5, null].includes(parsed.autoPauseTarget)) state.autoPauseTarget = parsed.autoPauseTarget;
     autoPauseTargetInput.value = state.autoPauseTarget === null ? "off" : String(state.autoPauseTarget);
+    if (Array.isArray(parsed.improvementPercentages) && parsed.improvementPercentages.length === 2 && parsed.improvementPercentages.every(value => Number.isInteger(value) && value >= 1 && value <= 99)) {
+      state.improvementPercentages = [...parsed.improvementPercentages];
+    }
 
     if (typeof parsed.themeMode === "string" && THEME_MODES.has(parsed.themeMode)) {
       state.themeMode = parsed.themeMode;

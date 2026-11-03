@@ -1,3 +1,5 @@
+import { metricOpportunityRows } from "./metric-opportunity.mjs";
+
 export function createMetricsView({
   state, document, METRICS, STRATEGIES, MIN_STAT_SIG_SAMPLES, SCORING_MODEL_VERSION, metricContribution, getPercentile, summarize, attachTooltipHandlers,
 }) {
@@ -37,12 +39,23 @@ export function createMetricsView({
     return {
       label: `${formatSignedNumber(deltaPoints, 1)} pts vs baseline`,
       detail: `${formatDeltaPointsAndPercent(deltaPoints, baselinePoints)} compared to baseline`,
+      rows: [
+        ["Difference", `${formatSignedNumber(deltaPoints, 1)} points`],
+        ["Relative change", Number.isFinite(baselinePoints) && Math.abs(baselinePoints) >= 0.000001
+          ? `${formatSignedNumber((deltaPoints / baselinePoints) * 100, 1)}%` : "Unavailable"],
+      ],
     };
   }
 
   function setBaselineDeltaLabel(element, delta) {
     element.textContent = typeof delta === "string" ? delta : delta.label;
-    if (typeof delta !== "string") element.title = delta.detail;
+    if (typeof delta !== "string") {
+      element.dataset.tooltip = delta.detail;
+      element.dataset.tooltipIntro = "Compared with the baseline.";
+      element.dataset.tooltipRows = JSON.stringify(delta.rows);
+      element.setAttribute("aria-label", delta.detail);
+      attachTooltipHandlers(element);
+    }
   }
 
   function contributionPointsForDisplay(strategy, metricKey, value) {
@@ -92,9 +105,14 @@ export function createMetricsView({
 
     const pointsLine = document.createElement("span");
     pointsLine.className = "metric-points-line";
-    const contributionTooltip = `${SCORING_MODEL_VERSION} weighted contribution to the 100-point performance score. The measured metric is shown underneath.`;
+    const contributionTooltip = `Weighted points use Google's Lighthouse ${SCORING_MODEL_VERSION} scoring; estimates assume other metrics stay the same.`;
     pointsLine.dataset.tooltip = contributionTooltip;
-    pointsLine.title = contributionTooltip;
+    pointsLine.dataset.tooltipIntro = contributionTooltip;
+    pointsLine.dataset.tooltipRows = JSON.stringify([
+      ["Average value", metric.format(value)],
+      ["Weighted points", `${contribution.points} ${contribution.outOf}`],
+      ...metricOpportunityRows(metric, strategy, value),
+    ]);
     pointsLine.setAttribute(
       "aria-label",
       `${contribution.points} out of ${contribution.outOf.replace("/", "")} weighted points. ${metric.format(value)} measured.`,
@@ -178,8 +196,12 @@ export function createMetricsView({
       addConfidenceBounds(progress, lowScore.score, highScore.score, contribution.score);
       const pointsLine = block.querySelector(".metric-points-line");
       const explanation = `95% confidence interval for the average measured value: ${metric.format(lowValue)}–${metric.format(highValue)}; approximately ${formatPointValue(lowScore.points)}–${formatPointValue(highScore.points)} weighted points.`;
-      pointsLine.dataset.tooltip += ` ${explanation}`;
-      pointsLine.title = pointsLine.dataset.tooltip;
+      const rows = JSON.parse(pointsLine.dataset.tooltipRows);
+      rows.splice(2, 0,
+        ["95% value range", `${metric.format(lowValue)}–${metric.format(highValue)}`],
+        ["95% points range", `~${formatPointValue(lowScore.points)}–${formatPointValue(highScore.points)} points`],
+      );
+      pointsLine.dataset.tooltipRows = JSON.stringify(rows);
       pointsLine.setAttribute("aria-label", `${pointsLine.getAttribute("aria-label")} ${explanation}`);
     }
     block.prepend(progress);
