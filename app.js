@@ -1,3 +1,4 @@
+import { normalizeEnteredUrl } from "./src/url-input.mjs";
 import { createApiKeyController } from "./src/ui/api-key.mjs";
 import { createBackupControls } from "./src/ui/backup-controls.mjs";
 import { createMetricsView } from "./src/views/metrics.mjs";
@@ -276,11 +277,12 @@ initSortHeaders();
 addUrlForm.addEventListener("submit", (event) => {
   event.preventDefault();
 
-  const cleanedUrl = normalizeUrl(urlInput.value.trim());
+  const cleanedUrl = normalizeEnteredUrl(urlInput.value);
   if (!cleanedUrl) {
-    window.alert("Please enter a valid URL including protocol (https://...).");
+    window.alert("Please enter a valid HTTP or HTTPS URL.");
     return;
   }
+  urlInput.value = cleanedUrl;
 
   if (state.trackers.has(cleanedUrl)) {
     window.alert("This URL is already being tracked.");
@@ -923,7 +925,7 @@ function isShopifyPreviewHost(hostname) {
 }
 
 function addShopifyPbParam(urlValue) {
-  const url = parseUrlSafe(urlValue);
+  const url = parseUrlSafe(normalizeEnteredUrl(urlValue));
   if (!url || !isShopifyPreviewHost(url.hostname)) {
     return "";
   }
@@ -932,7 +934,7 @@ function addShopifyPbParam(urlValue) {
 }
 
 function shouldSuggestShopifyPb(urlValue) {
-  const url = parseUrlSafe(urlValue);
+  const url = parseUrlSafe(normalizeEnteredUrl(urlValue));
   if (!url || !isShopifyPreviewHost(url.hostname)) {
     return false;
   }
