@@ -48,7 +48,7 @@ export function updateConnectedEdgeShadow(container, top, bottom, tabLeft = null
     : "";
   if (runOutline) {
     const cover = hasTab
-      ? `M ${seamX - 16} ${top - 18} H ${seamX} V ${bottom + 18} H ${seamX - 16} Z`
+      ? `M ${seamX} ${top - 18} Q ${seamX} ${top} ${seamX - 18} ${top} H ${seamX - 24} V ${bottom} H ${seamX - 18} Q ${seamX} ${bottom} ${seamX} ${bottom + 18} Z`
       : "";
     svg.querySelector(".run-scrollbar-cover").setAttribute("d", cover);
   }

@@ -39,7 +39,7 @@ body.run-detail-open .run-detail-panel { display: flex; flex-direction: column; 
 .url-card-content { grid-template-columns: 1fr; }
 @media (min-width: 901px) {
  body:not(.comparison-active) main:has(#score-history-slot:not(:empty)) { display: grid; grid-template-columns: minmax(320px, 1fr) clamp(230px, 23vw, 380px) 0px; grid-template-rows: minmax(0, 1fr); gap: 0; padding: 0; overflow-x: auto; overflow-y: hidden; background: var(--canvas); }
- body:not(.comparison-active) main:has(#score-history-slot:not(:empty)) #sites-view { padding: 24px; min-width: 0; overflow-y: auto; background: var(--canvas); border-radius: 18px 0 0 0; box-shadow: none; }
+ body:not(.comparison-active) main:has(#score-history-slot:not(:empty)) #sites-view { padding: 24px 16px 24px 24px; margin-right: 8px; min-width: 0; overflow-y: auto; background: var(--canvas); border-radius: 18px 0 0 0; box-shadow: none; }
  .connected-edge-shadow { position: absolute; z-index: 4; top: 0; right: 0; width: 32px; height: 100%; overflow: hidden; pointer-events: none; }
  .site-library > .connected-edge-shadow { width: 100%; }
  .site-selection { box-shadow: none; }
